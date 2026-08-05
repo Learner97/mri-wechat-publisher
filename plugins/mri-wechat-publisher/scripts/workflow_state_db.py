@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sqlite3
 import sys
 import uuid
@@ -20,10 +21,17 @@ from typing import Any, Iterator
 from zoneinfo import ZoneInfo
 
 
-PLUGIN_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_DB = PLUGIN_ROOT / "output" / "workflow.db"
-DEFAULT_STATE_JSON = PLUGIN_ROOT / "output" / "automation-workflow-state.json"
-DEFAULT_PUBLICATION_JSON = PLUGIN_ROOT / "output" / "publication-registry.json"
+def resolve_data_dir() -> Path:
+    """Return a persistent user-data directory outside the installed plugin."""
+    configured = os.environ.get("MRI_WECHAT_DATA_DIR", "").strip()
+    base = Path(configured).expanduser() if configured else Path.cwd() / ".mri-wechat-publisher"
+    return base.resolve()
+
+
+DEFAULT_DATA_DIR = resolve_data_dir()
+DEFAULT_DB = DEFAULT_DATA_DIR / "workflow.db"
+DEFAULT_STATE_JSON = DEFAULT_DATA_DIR / "automation-workflow-state.json"
+DEFAULT_PUBLICATION_JSON = DEFAULT_DATA_DIR / "publication-registry.json"
 DEFAULT_COOLDOWN_ROUNDS = 5
 
 ACTIVE_STATUSES = {
@@ -973,7 +981,7 @@ def migrate_legacy(
                 )
             receipt_path = item.get("draft_receipt_path")
             if receipt_path:
-                resolved_receipt = (PLUGIN_ROOT.parents[1] / receipt_path).resolve()
+                resolved_receipt = (Path.cwd() / receipt_path).resolve()
                 if resolved_receipt.is_file():
                     receipt = load_json(resolved_receipt)
                     connection.execute(

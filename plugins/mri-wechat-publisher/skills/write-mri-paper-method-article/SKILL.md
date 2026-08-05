@@ -5,6 +5,8 @@ description: Create Chinese WeChat articles that combine MRI or cognitive-neuros
 
 # Write MRI Paper-and-Method Article
 
+Resolve `<plugin-root>` as the directory two levels above this `SKILL.md`. Resolve bundled schemas and scripts from that root rather than from the active working directory.
+
 ## Evidence gate
 
 1. Read the full source sections needed for the abstract, design, method, results, figure legends, discussion, limitations, and supplement-dependent claims.
@@ -43,4 +45,4 @@ Place references after the fifth section without numbering them as a sixth secti
 
 ## Output
 
-Produce JSON conforming to `../../schemas/article.schema.json`. Preserve a separate evidence map during drafting and require `qa-wechat-article` before draft delivery.
+Produce JSON conforming to `<plugin-root>/schemas/article.schema.json`. Preserve a separate evidence map during drafting and require `qa-wechat-article` before draft delivery.

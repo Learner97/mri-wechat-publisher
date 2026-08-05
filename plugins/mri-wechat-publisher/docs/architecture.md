@@ -32,7 +32,7 @@ API 草稿通道 ──失败──→ 已登录浏览器备用通道
 
 ## 状态
 
-主状态库存放于 `output/workflow.db`。状态路径为：
+主状态库存放于 `MRI_WECHAT_DATA_DIR/workflow.db`；未设置环境变量时使用活动工作区的 `.mri-wechat-publisher/workflow.db`。状态路径为：
 
 `AWAITING_SELECTION → SELECTED → WRITING → AWAITING_DRAFT_APPROVAL → DRAFT_SAVED → PUBLISHED`
 

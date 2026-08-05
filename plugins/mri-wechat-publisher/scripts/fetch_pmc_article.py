@@ -18,7 +18,7 @@ from typing import Any
 
 
 XLINK = "{http://www.w3.org/1999/xlink}href"
-USER_AGENT = "mri-wechat-literature-pilot/1.0 (contact: nature-skills@users.noreply.github.com)"
+USER_AGENT = "mri-wechat-publisher/0.1 (+https://github.com/Learner97/mri-wechat-publisher)"
 
 
 class FetchError(RuntimeError):

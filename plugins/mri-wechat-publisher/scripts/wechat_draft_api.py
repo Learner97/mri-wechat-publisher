@@ -26,6 +26,17 @@ API_BASE = "https://api.weixin.qq.com"
 APPROVAL_TOKEN = "USER_APPROVED_DRAFT_ONLY"
 
 
+def resolve_data_dir() -> Path:
+    configured = os.environ.get("MRI_WECHAT_DATA_DIR", "").strip()
+    base = Path(configured).expanduser() if configured else Path.cwd() / ".mri-wechat-publisher"
+    return base.resolve()
+
+
+def resolve_default_env_file() -> Path:
+    configured = os.environ.get("MRI_WECHAT_ENV_FILE", "").strip()
+    return (Path(configured).expanduser() if configured else Path.cwd() / ".env").resolve()
+
+
 class WeChatApiError(RuntimeError):
     """A non-secret WeChat API failure."""
 
@@ -233,7 +244,11 @@ def main() -> int:
     parser.add_argument("html", type=Path)
     parser.add_argument("--env-file", type=Path)
     parser.add_argument("--cover", type=Path, help="Override article.cover.path.")
-    parser.add_argument("--receipt", type=Path, default=Path("output/draft-receipt.json"))
+    parser.add_argument(
+        "--receipt",
+        type=Path,
+        default=resolve_data_dir() / "draft-receipt.json",
+    )
     parser.add_argument(
         "--check-token-only",
         action="store_true",
@@ -250,9 +265,11 @@ def main() -> int:
 
     article_path = args.article.resolve()
     html_path = args.html.resolve()
-    plugin_root = Path(__file__).resolve().parents[1]
-    workspace_env = plugin_root.parents[1] / ".env"
-    env_path = (args.env_file or workspace_env).resolve()
+    env_path = (
+        args.env_file.expanduser().resolve()
+        if args.env_file
+        else resolve_default_env_file()
+    )
     load_env_file(env_path)
 
     try:

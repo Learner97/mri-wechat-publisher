@@ -5,9 +5,11 @@ description: Validate an MRI WeChat article for fixed structure, source traceabi
 
 # QA WeChat Article
 
+Resolve `<plugin-root>` as the directory two levels above this `SKILL.md`. Invoke scripts by absolute path and keep the active working directory as the user's workspace.
+
 ## Run deterministic checks
 
-Run `scripts/validate_article.py <article.json>`. Treat any error as blocking.
+Run `python "<plugin-root>/scripts/validate_article.py" <article.json>`. Treat any error as blocking.
 
 ## Review scientific evidence
 

@@ -1,1 +1,4 @@
-# The phase-one runtime uses only the Python standard library.
+# Optional helpers used by the complete publication workflow.
+lxml>=5.0
+pdfplumber>=0.11
+tzdata>=2025.2

@@ -5,6 +5,8 @@ description: Save a user-approved WeChat article to an Official Account draft bo
 
 # Save WeChat Draft
 
+Resolve `<plugin-root>` as the directory two levels above this `SKILL.md`. Invoke scripts by absolute path and keep the active working directory as the user's workspace. Load credentials from environment variables first, then an explicit `--env-file`, then `.env` in the active workspace. Store receipts under `MRI_WECHAT_DATA_DIR` or `.mri-wechat-publisher/` in the active workspace.
+
 ## Hard gates
 
 Require all of the following:
@@ -23,7 +25,7 @@ Require all of the following:
 
 ## API path
 
-Use `scripts/wechat_draft_api.py`. Upload inline images, upload a cover image, rewrite image URLs, and add the draft. Report API error codes without tokens. Do not call free-publish, publish, mass-send, delete, or replace-live-content endpoints.
+Use `<plugin-root>/scripts/wechat_draft_api.py`. Upload inline images, upload a cover image, rewrite image URLs, and add the draft. Report API error codes without tokens. Do not call free-publish, publish, mass-send, delete, or replace-live-content endpoints.
 
 ## Browser path
 
@@ -33,4 +35,4 @@ Open the Official Account article editor, fill title, author, digest, body, and 
 
 Record transport, non-secret account label, article idempotency key, draft media id when available, visible title, timestamp, and verification result.
 
-For a database-managed cycle, call `scripts/workflow_state_db.py approve-draft` only after the user's explicit approval. After the draft API or browser verification succeeds, call `scripts/workflow_state_db.py record-draft --receipt <receipt.json>`. Never mark `DRAFT_SAVED` before both gates succeed. Ad-hoc test drafts without a workflow cycle may keep a standalone receipt.
+For a database-managed cycle, call `<plugin-root>/scripts/workflow_state_db.py approve-draft` only after the user's explicit approval. After the draft API or browser verification succeeds, call `<plugin-root>/scripts/workflow_state_db.py record-draft --receipt <receipt.json>`. Never mark `DRAFT_SAVED` before both gates succeed. Ad-hoc test drafts without a workflow cycle may keep a standalone receipt.

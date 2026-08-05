@@ -5,9 +5,15 @@ description: Orchestrate an evidence-grounded MRI or cognitive-neuroscience pape
 
 # Run MRI WeChat Workflow
 
+## Runtime paths
+
+Resolve `<plugin-root>` as the directory two levels above this `SKILL.md`. Invoke bundled scripts by their absolute path under `<plugin-root>/scripts`; do not require the active working directory to be the plugin directory. Keep the active working directory as the user's workspace.
+
+Store persistent state outside the installed plugin. Use `MRI_WECHAT_DATA_DIR` when set; otherwise use `.mri-wechat-publisher/` in the active workspace. Pass `--db <data-dir>/workflow.db` explicitly when coordinating scheduled or concurrent jobs.
+
 ## Transactional state
 
-Use `scripts/workflow_state_db.py` with `output/workflow.db` as the source of truth. Do not edit `output/automation-workflow-state.json` or `output/publication-registry.json` directly; they are compatibility snapshots generated after each committed database change.
+Use `<plugin-root>/scripts/workflow_state_db.py` with `<data-dir>/workflow.db` as the source of truth. Do not edit `<data-dir>/automation-workflow-state.json` or `<data-dir>/publication-registry.json` directly; they are compatibility snapshots generated after each committed database change.
 
 - Read permanent and five-round cooldown exclusions with `recommendation-exclusions`, then create a recommendation cycle with `create-cycle`.
 - Record one explicit choice with `select`, or an ordered multi-selection such as `2,3` with `select-order --choices 2,3`.
@@ -26,7 +32,7 @@ Use `scripts/workflow_state_db.py` with `output/workflow.db` as the source of tr
 4. Invoke `format-wechat-article` and preserve the validated article JSON as the source of truth.
 5. Show the user the title, digest, section inventory, figure inventory, and QA result. Obtain explicit approval before writing to the live draft box.
 6. Invoke `save-wechat-draft` with `draft_only=true`.
-7. Persist the verified draft receipt through `workflow_state_db.py record-draft`. If it returns `next_queued`, report the next queued paper; do not fetch its full text until a later `claim-writing` succeeds.
+7. Persist the verified draft receipt through `<plugin-root>/scripts/workflow_state_db.py record-draft`. If it returns `next_queued`, report the next queued paper; do not fetch its full text until a later `claim-writing` succeeds.
 8. Return the transport used, draft identifier or visible draft title, timestamp, and any manual follow-up.
 
 ## State rules

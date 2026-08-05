@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import tempfile
 import unittest
 import uuid
 from pathlib import Path
@@ -19,8 +21,14 @@ def write_json(path: Path, payload: dict) -> None:
 
 class WorkflowStateDatabaseTest(unittest.TestCase):
     def test_migration_and_full_cycle(self) -> None:
-        root = store.PLUGIN_ROOT / "output" / f".workflow-db-test-{uuid.uuid4().hex}"
-        root.mkdir(parents=True, exist_ok=False)
+        configured_parent = os.environ.get("MRI_WECHAT_TEST_DIR", "").strip()
+        if configured_parent:
+            parent = Path(configured_parent).expanduser().resolve()
+            parent.mkdir(parents=True, exist_ok=True)
+            root = parent / f"workflow-{uuid.uuid4().hex}"
+            root.mkdir(parents=True, exist_ok=False)
+        else:
+            root = Path(tempfile.mkdtemp(prefix="mri-wechat-workflow-test-"))
         self.addCleanup(shutil.rmtree, root, True)
         connection = None
         try:
