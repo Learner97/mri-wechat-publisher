@@ -1,0 +1,5 @@
+interface:
+  display_name: "MRI 微信工作流"
+  short_description: "编排 MRI 文献融合写作、质检、排版和安全草稿保存流程"
+  default_prompt: "使用 $run-mri-wechat-workflow 将一篇 MRI 论文生成并保存为待审核的公众号草稿。"
+

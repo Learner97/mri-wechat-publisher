@@ -1,0 +1,5 @@
+interface:
+  display_name: "保存公众号草稿"
+  short_description: "通过微信 API 或已登录浏览器安全保存草稿并禁止自动发表"
+  default_prompt: "使用 $save-wechat-draft 将已审核文章保存到公众号草稿箱，但不要发表。"
+

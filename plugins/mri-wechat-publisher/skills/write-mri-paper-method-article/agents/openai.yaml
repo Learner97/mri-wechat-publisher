@@ -1,0 +1,5 @@
+interface:
+  display_name: "MRI 文献方法融合写作"
+  short_description: "将 MRI 论文写成五段式文献解读与核心方法融合的中文文章"
+  default_prompt: "使用 $write-mri-paper-method-article 将论文写成五段式中文文献与方法融合文章。"
+

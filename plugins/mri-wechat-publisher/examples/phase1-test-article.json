@@ -1,0 +1,107 @@
+{
+  "schema_version": 1,
+  "article_id": "phase1-test-001",
+  "publication_mode": "draft_only",
+  "title": "【自动化测试—请勿发表】MRI 文献融合排版测试",
+  "author": "脑影像工坊",
+  "digest": "用于验证五段式文章结构、微信公众号排版和草稿保存流程，不对应任何真实研究结论。",
+  "content_source_url": "",
+  "source": {
+    "title": "第一阶段内部测试夹具",
+    "source_id": "PHASE1-TEST-001",
+    "doi": "",
+    "url": "",
+    "journal": "",
+    "published_at": "2026-08-03"
+  },
+  "cover": {
+    "path": "../assets/phase1-test-cover.png"
+  },
+  "sections": [
+    {
+      "id": "abstract",
+      "heading": "摘要解读",
+      "blocks": [
+        {
+          "type": "callout",
+          "text": "这是一篇系统测试草稿，只用于确认内容能否安全进入公众号草稿箱。"
+        },
+        {
+          "type": "paragraph",
+          "text": "第一阶段验证的核心不是科学结论，而是结构化内容、排版、质检和草稿保存之间能否形成稳定闭环。"
+        }
+      ]
+    },
+    {
+      "id": "design",
+      "heading": "研究设计与数据",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "测试输入由五个固定章节、一个内部来源标识和可追溯的证据记录组成，不包含真实受试者数据。"
+        }
+      ]
+    },
+    {
+      "id": "method",
+      "heading": "核心方法解析",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "转换器读取统一 JSON，先检查章节、标题和发布模式，再输出只包含保守内联样式的微信公众号 HTML。"
+        },
+        {
+          "type": "list",
+          "ordered": true,
+          "items": [
+            "验证结构和证据字段。",
+            "生成微信兼容 HTML。",
+            "经人工确认后仅保存到草稿箱。"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "results",
+      "heading": "关键结果与证据链",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "如果测试成功，后台应出现同名草稿；这只能证明 B 级草稿闭环通过，不能证明自动发表或群发能力。"
+        }
+      ]
+    },
+    {
+      "id": "implications",
+      "heading": "方法启示与总结",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "后续真实文章将复用同一数据契约，并在写入草稿前增加全文证据核查、图片许可检查和用户确认。"
+        }
+      ]
+    }
+  ],
+  "figures": [],
+  "references": [
+    {
+      "id": "R1",
+      "citation": "MRI 文献公众号助手第一阶段内部测试规范，2026。",
+      "doi": "",
+      "url": "",
+      "verified": true
+    }
+  ],
+  "evidence_map": [
+    {
+      "claim_id": "C1",
+      "claim": "该内容仅为流程测试，不对应真实研究结论。",
+      "source_locator": "PHASE1-TEST-001/fixture-definition",
+      "status": "verified"
+    }
+  ],
+  "settings": {
+    "need_open_comment": 0,
+    "only_fans_can_comment": 0
+  }
+}

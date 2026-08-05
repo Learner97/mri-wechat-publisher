@@ -1,0 +1,32 @@
+{
+  "name": "mri-wechat-publisher",
+  "version": "0.1.0+codex.20260804091156",
+  "description": "Create evidence-grounded Chinese MRI paper-and-method articles, format them for WeChat, and save reviewed content to the Official Account draft box without publishing.",
+  "author": {
+    "name": "Solel"
+  },
+  "keywords": [
+    "MRI",
+    "cognitive-neuroscience",
+    "literature",
+    "wechat",
+    "draft"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "MRI \u6587\u732e\u516c\u4f17\u53f7\u52a9\u624b",
+    "shortDescription": "\u628a MRI \u6587\u732e\u89e3\u8bfb\u4e0e\u65b9\u6cd5\u89e3\u6790\u8f6c\u6362\u4e3a\u5f85\u5ba1\u6838\u7684\u5fae\u4fe1\u516c\u4f17\u53f7\u8349\u7a3f\u3002",
+    "longDescription": "\u9762\u5411 MRI\u3001\u8ba4\u77e5\u795e\u7ecf\u79d1\u5b66\u53ca\u76f8\u5173\u533b\u5b66\u548c\u751f\u7269\u5b66\u9886\u57df\uff0c\u5b8c\u6210\u6587\u732e\u4e0e\u65b9\u6cd5\u878d\u5408\u5199\u4f5c\u3001\u8bc1\u636e\u6838\u67e5\u3001\u5fae\u4fe1\u516c\u4f17\u53f7\u6392\u7248\uff0c\u5e76\u901a\u8fc7 API \u6216\u5df2\u767b\u5f55\u6d4f\u89c8\u5668\u4fdd\u5b58\u8349\u7a3f\u3002\u63d2\u4ef6\u9ed8\u8ba4\u7981\u6b62\u81ea\u52a8\u53d1\u8868\u3002",
+    "developerName": "Solel",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "\u5c06\u4e00\u7bc7 MRI \u8bba\u6587\u5199\u6210\u4e94\u6bb5\u5f0f\u6587\u732e\u4e0e\u65b9\u6cd5\u878d\u5408\u6587\u7ae0\u3002",
+      "\u628a\u5df2\u5b8c\u6210\u6587\u7ae0\u8f6c\u6362\u6210\u5fae\u4fe1\u516c\u4f17\u53f7\u517c\u5bb9 HTML\u3002",
+      "\u8d28\u68c0\u6587\u7ae0\u5e76\u4fdd\u5b58\u5230\u516c\u4f17\u53f7\u8349\u7a3f\u7bb1\uff0c\u4f46\u4e0d\u8981\u53d1\u8868\u3002"
+    ]
+  }
+}
