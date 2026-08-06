@@ -13,6 +13,7 @@ Run `python "<plugin-root>/scripts/validate_article.py" <article.json>`. Treat a
 
 ## Review scientific evidence
 
+- Confirm the title uses `<journal name or recognized abbreviation> | <short content-specific hook>`, matches the verified source journal, and keeps the content hook after ` | ` within 20 characters; do not count the journal label or separator toward that limit.
 - Reconcile each quantitative or anatomical claim with the evidence map.
 - Verify bibliographic metadata through the supplied paper, DOI landing page, PubMed, Crossref, or publisher.
 - Confirm that general method properties are not inferred from one implementation.

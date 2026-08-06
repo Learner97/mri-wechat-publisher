@@ -100,7 +100,8 @@ def render_article(
         'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,Hiragino Sans GB,'
         'Microsoft YaHei,sans-serif;">',
         '<h1 style="margin:8px 0 14px;font-size:24px;line-height:1.45;color:#173f5f;'
-        f'font-weight:700;text-align:left;">{inline_text(article["title"])}</h1>',
+        'font-weight:700;text-align:left;overflow-wrap:anywhere;word-break:break-word;">'
+        f'{inline_text(article["title"])}</h1>',
         '<p style="margin:0 0 16px;font-size:13px;line-height:1.6;color:#777;">'
         f'作者：{inline_text(article["author"])}</p>',
         '<section style="margin:0 0 24px;padding:14px 16px;background:#f7f8fa;border-radius:6px;">'

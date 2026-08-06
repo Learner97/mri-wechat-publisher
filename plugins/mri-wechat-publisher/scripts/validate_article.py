@@ -97,6 +97,14 @@ def validate_article(article: dict[str, Any], article_path: Path | None = None) 
         elif len(value.strip()) > maximum:
             errors.append(f"{field} 超过 {maximum} 个字符。")
 
+    title = article.get("title")
+    if isinstance(title, str) and title.strip():
+        parts = title.strip().split(" | ", maxsplit=1)
+        if len(parts) != 2 or not all(part.strip() for part in parts):
+            errors.append("title 必须使用“期刊全名或公认缩写 | 简短内容题眼”结构。")
+        elif len(parts[1].strip()) > 20:
+            errors.append("title 的内容主标题（` | ` 之后）超过 20 个字符。")
+
     source = article.get("source")
     if not isinstance(source, dict):
         errors.append("source 必须是对象。")
@@ -223,7 +231,12 @@ def validate_article(article: dict[str, Any], article_path: Path | None = None) 
         "errors": errors,
         "warnings": warnings,
         "statistics": {
-            "title_characters": len(str(article.get("title", ""))),
+            "title_characters": len(str(article.get("title", "")).strip()),
+            "title_hook_characters": (
+                len(str(article.get("title", "")).strip().split(" | ", maxsplit=1)[1].strip())
+                if " | " in str(article.get("title", "")).strip()
+                else 0
+            ),
             "digest_characters": len(str(article.get("digest", ""))),
             "body_characters_no_whitespace": body_characters,
             "section_count": len(sections),
@@ -257,4 +270,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

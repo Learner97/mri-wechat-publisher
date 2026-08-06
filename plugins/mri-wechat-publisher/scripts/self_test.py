@@ -40,8 +40,12 @@ def main() -> int:
     assert_blocked(leaked_secret, article_path, "credential leakage")
 
     too_long_title = copy.deepcopy(article)
-    too_long_title["title"] = "测" * 65
-    assert_blocked(too_long_title, article_path, "title length")
+    too_long_title["title"] = "测试期刊 | " + "测" * 21
+    assert_blocked(too_long_title, article_path, "title hook length")
+
+    missing_journal_separator = copy.deepcopy(article)
+    missing_journal_separator["title"] = "没有期刊分隔符"
+    assert_blocked(missing_journal_separator, article_path, "title journal separator")
 
     rendered = render_article(article)
     if any(pattern.search(rendered) for pattern in FORBIDDEN_HTML_PATTERNS):
@@ -54,7 +58,7 @@ def main() -> int:
         json.dumps(
             {
                 "status": "SELF_TEST_PASSED",
-                "tests": 6,
+                "tests": 7,
                 "network_calls": 0,
                 "live_draft_writes": 0,
             },
@@ -67,4 +71,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
