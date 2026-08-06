@@ -43,9 +43,17 @@ def main() -> int:
     too_long_title["title"] = "测试期刊 | " + "测" * 21
     assert_blocked(too_long_title, article_path, "title hook length")
 
+    full_title_over_limit = copy.deepcopy(article)
+    full_title_over_limit["title"] = "超长测试期刊名称" * 8 + " | 合法题眼"
+    assert_blocked(full_title_over_limit, article_path, "full title length")
+
     missing_journal_separator = copy.deepcopy(article)
     missing_journal_separator["title"] = "没有期刊分隔符"
     assert_blocked(missing_journal_separator, article_path, "title journal separator")
+
+    multiple_journal_separators = copy.deepcopy(article)
+    multiple_journal_separators["title"] = "测试期刊 | 方法 | 结果"
+    assert_blocked(multiple_journal_separators, article_path, "multiple title separators")
 
     rendered = render_article(article)
     if any(pattern.search(rendered) for pattern in FORBIDDEN_HTML_PATTERNS):
@@ -58,7 +66,7 @@ def main() -> int:
         json.dumps(
             {
                 "status": "SELF_TEST_PASSED",
-                "tests": 7,
+                "tests": 9,
                 "network_calls": 0,
                 "live_draft_writes": 0,
             },

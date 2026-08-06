@@ -99,8 +99,13 @@ def validate_article(article: dict[str, Any], article_path: Path | None = None) 
 
     title = article.get("title")
     if isinstance(title, str) and title.strip():
-        parts = title.strip().split(" | ", maxsplit=1)
-        if len(parts) != 2 or not all(part.strip() for part in parts):
+        title_text = title.strip()
+        parts = title_text.split(" | ")
+        if (
+            len(parts) != 2
+            or "|" in title_text.replace(" | ", "")
+            or not all(part and part == part.strip() for part in parts)
+        ):
             errors.append("title 必须使用“期刊全名或公认缩写 | 简短内容题眼”结构。")
         elif len(parts[1].strip()) > 20:
             errors.append("title 的内容主标题（` | ` 之后）超过 20 个字符。")
