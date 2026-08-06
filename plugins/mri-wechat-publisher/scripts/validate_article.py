@@ -100,15 +100,20 @@ def validate_article(article: dict[str, Any], article_path: Path | None = None) 
     title = article.get("title")
     if isinstance(title, str) and title.strip():
         title_text = title.strip()
-        parts = title_text.split(" | ")
-        if (
-            len(parts) != 2
-            or "|" in title_text.replace(" | ", "")
-            or not all(part and part == part.strip() for part in parts)
-        ):
-            errors.append("title 必须使用“期刊全名或公认缩写 | 简短内容题眼”结构。")
-        elif len(parts[1].strip()) > 20:
-            errors.append("title 的内容主标题（` | ` 之后）超过 20 个字符。")
+        if title != title_text:
+            errors.append("title 首尾不得包含空白字符。")
+        elif "\r" in title_text or "\n" in title_text:
+            errors.append("title 不得包含换行。")
+        else:
+            parts = title_text.split(" | ")
+            if (
+                len(parts) != 2
+                or "|" in title_text.replace(" | ", "")
+                or not all(part and part == part.strip() for part in parts)
+            ):
+                errors.append("title 必须使用“期刊全名或公认缩写 | 简短内容题眼”结构。")
+            elif len(parts[1]) > 20:
+                errors.append("title 的内容主标题（` | ` 之后）超过 20 个字符。")
 
     source = article.get("source")
     if not isinstance(source, dict):
@@ -118,6 +123,15 @@ def validate_article(article: dict[str, Any], article_path: Path | None = None) 
             errors.append("source.title 不能为空。")
         if not str(source.get("source_id", "")).strip():
             errors.append("source.source_id 不能为空；可使用 DOI、PMID 或内部测试标识。")
+
+    cover = article.get("cover")
+    if cover is not None:
+        if not isinstance(cover, dict):
+            errors.append("cover 必须是对象或 null。")
+        else:
+            for field in ("path", "alt", "source_note"):
+                if not isinstance(cover.get(field), str) or not cover[field].strip():
+                    errors.append(f"cover.{field} 不能为空。")
 
     sections = article.get("sections")
     if not isinstance(sections, list):

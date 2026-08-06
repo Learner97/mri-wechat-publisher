@@ -15,7 +15,9 @@
     "published_at": "2026-08-03"
   },
   "cover": {
-    "path": "../assets/phase1-test-cover.png"
+    "path": "../assets/phase1-test-cover.png",
+    "alt": "MRI 文献公众号助手离线测试封面",
+    "source_note": "项目自生成测试素材，仅用于离线验证。"
   },
   "sections": [
     {

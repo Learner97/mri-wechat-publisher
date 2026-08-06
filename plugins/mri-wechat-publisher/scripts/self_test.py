@@ -8,8 +8,11 @@ import json
 import sys
 from pathlib import Path
 
+from jsonschema import Draft202012Validator
+
 from render_wechat_html import FORBIDDEN_HTML_PATTERNS, render_article
 from validate_article import load_article, validate_article
+from wechat_draft_api import WeChatApiError, resolve_required_cover
 
 
 def assert_blocked(article: dict, article_path: Path, label: str) -> None:
@@ -26,6 +29,15 @@ def main() -> int:
     baseline = validate_article(article, article_path)
     if baseline["status"] != "QA_PASSED":
         raise AssertionError(f"baseline failed: {baseline}")
+
+    schema_path = root / "schemas" / "article.schema.json"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    schema_errors = sorted(
+        Draft202012Validator(schema).iter_errors(article),
+        key=lambda error: list(error.absolute_path),
+    )
+    if schema_errors:
+        raise AssertionError(f"example schema validation failed: {schema_errors}")
 
     wrong_mode = copy.deepcopy(article)
     wrong_mode["publication_mode"] = "publish"
@@ -55,6 +67,31 @@ def main() -> int:
     multiple_journal_separators["title"] = "测试期刊 | 方法 | 结果"
     assert_blocked(multiple_journal_separators, article_path, "multiple title separators")
 
+    padded_title = copy.deepcopy(article)
+    padded_title["title"] = f" {article['title']} "
+    assert_blocked(padded_title, article_path, "title outer whitespace")
+
+    multiline_title = copy.deepcopy(article)
+    multiline_title["title"] = "测试期刊 | MRI\n排版"
+    assert_blocked(multiline_title, article_path, "title newline")
+
+    missing_cover = copy.deepcopy(article)
+    missing_cover["cover"] = None
+    try:
+        resolve_required_cover(missing_cover, article_path)
+    except WeChatApiError:
+        pass
+    else:
+        raise AssertionError("missing cover should block dry-run readiness")
+
+    incomplete_cover = copy.deepcopy(article)
+    incomplete_cover["cover"] = {"path": article["cover"]["path"]}
+    assert_blocked(incomplete_cover, article_path, "incomplete cover metadata")
+
+    cover_path = resolve_required_cover(article, article_path)
+    if not cover_path.is_file():
+        raise AssertionError(f"example cover was not resolved: {cover_path}")
+
     rendered = render_article(article)
     if any(pattern.search(rendered) for pattern in FORBIDDEN_HTML_PATTERNS):
         raise AssertionError("renderer emitted forbidden HTML")
@@ -66,7 +103,7 @@ def main() -> int:
         json.dumps(
             {
                 "status": "SELF_TEST_PASSED",
-                "tests": 9,
+                "tests": 14,
                 "network_calls": 0,
                 "live_draft_writes": 0,
             },
