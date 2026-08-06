@@ -21,7 +21,7 @@
     "schema_version": {"const": 1},
     "article_id": {"type": "string", "minLength": 1, "maxLength": 100},
     "publication_mode": {"const": "draft_only"},
-    "title": {"type": "string", "minLength": 1, "maxLength": 64},
+    "title": {"type": "string", "minLength": 5, "maxLength": 64, "pattern": "^[^|\\s](?:[^|\\r\\n]*[^|\\s])? \\| [^|\\s](?:[^|\\r\\n]{0,18}[^|\\s])?$"},
     "author": {"type": "string", "minLength": 1, "maxLength": 64},
     "digest": {"type": "string", "minLength": 1, "maxLength": 120},
     "content_source_url": {"type": "string"},
@@ -134,4 +134,3 @@
     }
   }
 }
-

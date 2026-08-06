@@ -26,6 +26,17 @@ API_BASE = "https://api.weixin.qq.com"
 APPROVAL_TOKEN = "USER_APPROVED_DRAFT_ONLY"
 
 
+def resolve_data_dir() -> Path:
+    configured = os.environ.get("MRI_WECHAT_DATA_DIR", "").strip()
+    base = Path(configured).expanduser() if configured else Path.cwd() / ".mri-wechat-publisher"
+    return base.resolve()
+
+
+def resolve_default_env_file() -> Path:
+    configured = os.environ.get("MRI_WECHAT_ENV_FILE", "").strip()
+    return (Path(configured).expanduser() if configured else Path.cwd() / ".env").resolve()
+
+
 class WeChatApiError(RuntimeError):
     """A non-secret WeChat API failure."""
 
@@ -199,6 +210,26 @@ def resolve_article_asset(article_path: Path, value: str) -> Path:
     return candidate.resolve()
 
 
+def resolve_required_cover(
+    article: dict[str, Any],
+    article_path: Path,
+    override: Path | None = None,
+) -> Path:
+    cover_value: Path | None = override
+    if cover_value is None and isinstance(article.get("cover"), dict):
+        configured_path = str(article["cover"].get("path", "")).strip()
+        if configured_path:
+            cover_value = Path(configured_path)
+    if cover_value is None:
+        raise WeChatApiError(
+            "草稿准备需要封面图片；请设置 article.cover.path，或传入 --cover <image>。"
+        )
+    cover_path = resolve_article_asset(article_path, str(cover_value))
+    if not cover_path.is_file():
+        raise WeChatApiError(f"封面文件不存在：{cover_path}")
+    return cover_path
+
+
 def rewrite_inline_images(
     token: str,
     article: dict[str, Any],
@@ -233,7 +264,11 @@ def main() -> int:
     parser.add_argument("html", type=Path)
     parser.add_argument("--env-file", type=Path)
     parser.add_argument("--cover", type=Path, help="Override article.cover.path.")
-    parser.add_argument("--receipt", type=Path, default=Path("output/draft-receipt.json"))
+    parser.add_argument(
+        "--receipt",
+        type=Path,
+        default=resolve_data_dir() / "draft-receipt.json",
+    )
     parser.add_argument(
         "--check-token-only",
         action="store_true",
@@ -250,9 +285,11 @@ def main() -> int:
 
     article_path = args.article.resolve()
     html_path = args.html.resolve()
-    plugin_root = Path(__file__).resolve().parents[1]
-    workspace_env = plugin_root.parents[1] / ".env"
-    env_path = (args.env_file or workspace_env).resolve()
+    env_path = (
+        args.env_file.expanduser().resolve()
+        if args.env_file
+        else resolve_default_env_file()
+    )
     load_env_file(env_path)
 
     try:
@@ -312,9 +349,7 @@ def main() -> int:
             )
             return 0
 
-        cover_value = args.cover
-        if cover_value is None and isinstance(article.get("cover"), dict):
-            cover_value = Path(article["cover"]["path"])
+        cover_path = resolve_required_cover(article, article_path, args.cover)
 
         plan = {
             "status": "DRY_RUN_READY" if not args.execute else "EXECUTION_REQUESTED",
@@ -324,7 +359,7 @@ def main() -> int:
             "title": article["title"],
             "credential_presence": credential_presence(),
             "inline_image_count": len(article.get("figures", [])),
-            "cover_configured": cover_value is not None,
+            "cover_configured": True,
             "operations": ["stable_token", "upload_content_images", "upload_cover_material", "add_draft"],
         }
         if not args.execute:
@@ -338,13 +373,6 @@ def main() -> int:
         presence = credential_presence()
         if not all(presence.values()):
             raise WeChatApiError(f"本地凭据未配置完整：{presence}。不要在聊天中粘贴 AppSecret。")
-        if cover_value is None:
-            raise WeChatApiError("API 新增草稿需要封面图片。")
-
-        cover_path = resolve_article_asset(article_path, str(cover_value))
-        if not cover_path.is_file():
-            raise WeChatApiError(f"封面文件不存在：{cover_path}")
-
         app_id = os.environ["WECHAT_APP_ID"].strip()
         app_secret = os.environ["WECHAT_APP_SECRET"].strip()
         token = get_stable_token(app_id, app_secret)

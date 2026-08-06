@@ -5,16 +5,18 @@ description: Convert validated structured Chinese scientific articles into conse
 
 # Format WeChat Article
 
+Resolve `<plugin-root>` as the directory two levels above this `SKILL.md`. Invoke scripts by absolute path and keep the active working directory as the user's workspace.
+
 ## Preconditions
 
-Require article JSON that passes `scripts/validate_article.py`. Do not repair unsupported scientific claims during formatting.
+Require article JSON that passes `<plugin-root>/scripts/validate_article.py`. Do not repair unsupported scientific claims during formatting.
 
 ## Rendering
 
 Run:
 
 ```powershell
-python scripts/render_wechat_html.py <article.json> --output <article.html>
+python "<plugin-root>/scripts/render_wechat_html.py" <article.json> --output <article.html>
 ```
 
 Use inline styles only. Remove scripts, forms, iframes, external stylesheets, event handlers, unsupported CSS positioning, and hidden content. Preserve the five heading names and reference order.

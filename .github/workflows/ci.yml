@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  offline-tests:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        python-version: ["3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: plugins/mri-wechat-publisher
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Compile scripts
+        run: python -m compileall -q scripts
+      - name: Validate example article and renderer safety
+        run: python scripts/self_test.py
+      - name: Test transactional workflow state
+        run: python scripts/test_workflow_state_db.py
+      - name: Validate example article contract
+        run: python scripts/validate_article.py examples/phase1-test-article.json

@@ -19,12 +19,13 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 
-USER_AGENT = "mri-wechat-literature-pilot/1.0 (contact: nature-skills@users.noreply.github.com)"
+USER_AGENT = "mri-wechat-publisher/0.1 (+https://github.com/Learner97/mri-wechat-publisher)"
+CONTACT_EMAIL = os.environ.get("NCBI_EMAIL", "").strip() or "Learner97@users.noreply.github.com"
 PUBMED_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 OPENALEX_BASE = "https://api.openalex.org/works"
 
@@ -139,7 +140,7 @@ def pubmed_search(date_from: str, retmax: int = 300) -> list[str]:
         "retmax": retmax,
         "sort": "pub date",
         "tool": "mri_wechat_pilot",
-        "email": "nature-skills@users.noreply.github.com",
+        "email": CONTACT_EMAIL,
     }
     api_key = os.environ.get("NCBI_API_KEY", "").strip()
     if api_key:
@@ -185,7 +186,7 @@ def pubmed_fetch(pmids: list[str]) -> list[dict[str, Any]]:
             "id": ",".join(batch),
             "retmode": "xml",
             "tool": "mri_wechat_pilot",
-            "email": "nature-skills@users.noreply.github.com",
+            "email": CONTACT_EMAIL,
         }
         api_key = os.environ.get("NCBI_API_KEY", "").strip()
         if api_key:
@@ -259,7 +260,7 @@ def openalex_search(date_from: str) -> list[dict[str, Any]]:
             "search": query,
             "filter": f"from_publication_date:{date_from},type:article",
             "per-page": 100,
-            "mailto": "nature-skills@users.noreply.github.com",
+            "mailto": CONTACT_EMAIL,
         }
         url = f"{OPENALEX_BASE}?{urllib.parse.urlencode(params)}"
         data = json.loads(request_bytes(url).decode("utf-8"))
@@ -364,15 +365,19 @@ def score_record(record: dict[str, Any], today: date) -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--date-from", default="2024-08-04")
+    parser.add_argument(
+        "--date-from",
+        help="Earliest publication date (YYYY-MM-DD); defaults to a rolling two-year window.",
+    )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--limit", type=int, default=50)
     args = parser.parse_args()
 
     try:
-        pmids = pubmed_search(args.date_from)
+        date_from = args.date_from or (date.today() - timedelta(days=730)).isoformat()
+        pmids = pubmed_search(date_from)
         pubmed_records = pubmed_fetch(pmids)
-        openalex_records = openalex_search(args.date_from)
+        openalex_records = openalex_search(date_from)
         records = merge_records(pubmed_records + openalex_records)
         today = date.today()
         scored = [score_record(record, today) for record in records]
@@ -380,12 +385,12 @@ def main() -> int:
             record for record in scored
             if record["score_components"]["journal"] > 0
             and not record.get("excluded_reason")
-            and record.get("publication_date", "") >= args.date_from
+            and record.get("publication_date", "") >= date_from
         ]
         scored.sort(key=lambda item: (item["total_score"], item.get("publication_date", ""), item.get("cited_by_count", 0)), reverse=True)
         payload = {
             "status": "SEARCH_COMPLETED",
-            "date_from": args.date_from,
+            "date_from": date_from,
             "generated_at": datetime.now().astimezone().isoformat(),
             "source_counts": {"pubmed": len(pubmed_records), "openalex": len(openalex_records)},
             "deduplicated_count": len(records),

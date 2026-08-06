@@ -8,9 +8,7 @@
 
 ## 状态交接
 
-唯一主状态库：
-
-`plugins/mri-wechat-publisher/output/workflow.db`
+唯一主状态库：`MRI_WECHAT_DATA_DIR/workflow.db`。未设置环境变量时使用定时任务活动工作区下的 `.mri-wechat-publisher/workflow.db`；所有相关任务必须显式使用同一个持久数据目录。
 
 `automation-workflow-state.json` 与 `publication-registry.json` 仅是数据库事务提交后自动生成的兼容快照，不得由任务直接编辑。
 
