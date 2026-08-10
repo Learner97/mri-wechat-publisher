@@ -28,14 +28,23 @@
     "source": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["title", "source_id"],
+      "required": [
+        "title",
+        "source_id",
+        "evidence_level",
+        "fulltext_verified",
+        "source_manifest"
+      ],
       "properties": {
         "title": {"type": "string", "minLength": 1},
         "source_id": {"type": "string", "minLength": 1},
         "doi": {"type": "string"},
         "url": {"type": "string"},
         "journal": {"type": "string"},
-        "published_at": {"type": "string"}
+        "published_at": {"type": "string"},
+        "evidence_level": {"enum": ["FULLTEXT", "TEST_FIXTURE"]},
+        "fulltext_verified": {"type": "boolean"},
+        "source_manifest": {"type": "string", "minLength": 1}
       }
     },
     "cover": {

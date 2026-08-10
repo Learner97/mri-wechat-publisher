@@ -12,7 +12,10 @@
     "doi": "",
     "url": "",
     "journal": "",
-    "published_at": "2026-08-03"
+    "published_at": "2026-08-03",
+    "evidence_level": "TEST_FIXTURE",
+    "fulltext_verified": false,
+    "source_manifest": "internal:test-fixture"
   },
   "cover": {
     "path": "../assets/phase1-test-cover.png",

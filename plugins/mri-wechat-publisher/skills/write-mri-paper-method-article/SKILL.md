@@ -1,6 +1,6 @@
 ---
 name: write-mri-paper-method-article
-description: Create Chinese WeChat articles that combine MRI or cognitive-neuroscience paper interpretation with a deeper transferable-method explanation. Use when source papers, PDFs, supplements, figures, DOI records, or verified notes must become the fixed five-section article JSON with an evidence map and traceable references.
+description: Create Chinese WeChat articles that combine MRI or cognitive-neuroscience paper interpretation with a deeper transferable-method explanation. Use when a verified full-text source manifest, main paper, supplements, figures, DOI records, and evidence notes must become the fixed five-section article JSON with claim-level traceability.
 ---
 
 # Write MRI Paper-and-Method Article
@@ -9,10 +9,28 @@ Resolve `<plugin-root>` as the directory two levels above this `SKILL.md`. Resol
 
 ## Evidence gate
 
-1. Read the full source sections needed for the abstract, design, method, results, figure legends, discussion, limitations, and supplement-dependent claims.
-2. Separate research topic, analysis family, transferable method, and paper-specific implementation.
-3. Build an evidence map for every quantitative result, method choice, interpretation, figure, DOI, and reuse condition.
-4. Reject unsupported details rather than filling gaps.
+1. Require a registered source manifest whose main paper identity matches the selected record.
+2. Require `SOURCE_VALIDATED` before treating the source as sufficient.
+3. Read the full sections needed for the abstract, design, methods, results, figure legends, discussion, limitations, and supplement-dependent claims.
+4. Reject unsupported details instead of filling gaps from the abstract or general knowledge.
+5. Do not generate the formal article when only an abstract is available.
+
+Set the article source fields to:
+
+```json
+{
+  "evidence_level": "FULLTEXT",
+  "fulltext_verified": true,
+  "source_manifest": "<registered manifest path>"
+}
+```
+
+## Evidence mapping
+
+- Map every quantitative result, method parameter, anatomical claim, figure, DOI, limitation, and reuse condition to the main text or a verified supplement.
+- Use precise locators such as PDF page, section, figure, table, supplement file, and supplement page.
+- Mark author conclusions, direct observations, and editorial interpretation separately.
+- Omit claims that cannot be located in the registered source bundle.
 
 ## Fixed structure
 
@@ -24,33 +42,32 @@ Write exactly these five main sections:
 4. 关键结果与证据链
 5. 方法启示与总结
 
-Place references after the fifth section without numbering them as a sixth section. Integrate cautions where they affect method interpretation or application. Do not create a standalone “最容易误解或做错的地方” or generic limitations section.
+Place references after the fifth section without numbering them as a sixth section. Integrate cautions where they affect interpretation. Do not create a standalone generic “最容易误解或做错的地方” section.
 
 ## Focus-first synthesis
 
-- Before drafting, state the article's single most important takeaway in one sentence. Use it to decide which findings are primary and which analyses are supporting evidence.
-- Near the beginning of “摘要解读”, include a visually distinct, concise synthesis of the scientific question, principal finding, and why it matters. Its label, subheading, format, and number of points must follow the paper naturally; never force stock wording such as “30秒读懂”.
-- Keep the principal findings prominent across the article. Design details, parameters, secondary outcomes, and sensitivity analyses should support the main evidence chain rather than compete with it as equal-weight conclusions.
-- At the end of “方法启示与总结”, naturally gather the most important conclusions again. Use prose, a callout, or a short list as appropriate, with a content-specific or omitted heading; never force stock wording or a fixed number of takeaways.
-- The opening synthesis and closing recap must add navigation and emphasis, not repeat identical sentences or turn the article into a formulaic template.
+- State the single most important takeaway before drafting and use it to prioritize evidence.
+- Open “摘要解读” with a concise, content-specific synthesis of the question, principal finding, and importance. Do not force labels such as“30秒读懂”。
+- Keep primary findings visually and logically prominent; parameters and sensitivity analyses should support the main evidence chain.
+- Close naturally with the most important conclusions. Do not force a fixed heading or a fixed number of takeaways.
+- Avoid repeating identical opening and closing sentences.
 
 ## Title contract
 
-- For an article centered on one paper, use the fixed shape `<journal name or recognized abbreviation> | <short content-specific hook>` so the source venue is visible at a glance.
-- Count only the content hook after ` | `. It must not exceed 20 characters; the journal label and separator are excluded from this limit.
-- Prefer the journal's conventional abbreviation when its full name would make the title too long; for example, use `Nat Neurosci` for *Nature Neuroscience*.
-- Keep the hook faithful to the paper's central question, method, or finding. Use the available 20 characters when they improve specificity, but do not copy the full paper title, stack subtitles, or use a generic slogan.
-- Verify the journal label against the publisher or bibliographic record before drafting the title.
+- Use `<journal name or recognized abbreviation> | <short content-specific hook>`.
+- Count only the hook after ` | `; it must not exceed 20 Chinese characters.
+- Verify the journal label against the source record.
+- Prefer a specific hook over a generic slogan or copied paper title.
 
 ## Editorial profile
 
-- Target 8,000–11,000 Chinese characters when the evidence supports it.
+- Target 8,000–11,000 Chinese characters when evidence supports that length.
 - Allocate roughly 55%–60% to background, design, and results; 30%–35% to method; 10%–15% to implications and summary.
-- Select 5–7 non-duplicative figures when usable and legally supportable.
+- Select 5–8 non-duplicative figures only when their source and reuse status are verified.
 - Explain general method logic before the paper-specific implementation.
 - Use cautious language for clinical, predictive, mechanistic, and causal claims.
-- Never invent sample sizes, parameters, regions, statistics, software versions, references, DOIs, or licenses.
+- Never invent sample sizes, parameters, regions, statistics, software versions, references, DOIs, licenses, or unavailable supplement results.
 
 ## Output
 
-Produce JSON conforming to `<plugin-root>/schemas/article.schema.json`. Preserve a separate evidence map during drafting and require `qa-wechat-article` before draft delivery.
+Produce JSON conforming to `<plugin-root>/schemas/article.schema.json`. Bind it to the registered source manifest, preserve a separate evidence map, and require `qa-wechat-article` before draft delivery.

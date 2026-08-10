@@ -128,10 +128,21 @@ def collect_supplements(root: ET.Element, source_dir: Path) -> list[dict[str, st
     return supplements
 
 
-def fetch_xml_assets(nxml_path: Path, source_dir: Path, pmcid: str) -> dict[str, int]:
+def fetch_xml_assets(
+    nxml_path: Path,
+    source_dir: Path,
+    pmcid: str,
+    asset_mode: str = "all",
+) -> dict[str, int]:
     root = ET.parse(nxml_path).getroot()
+    if asset_mode == "none":
+        return {"downloaded": 0, "failed": 0}
     hrefs: set[str] = set()
-    for node in root.iter():
+    if asset_mode == "figures":
+        nodes = root.findall(".//fig//graphic")
+    else:
+        nodes = root.iter()
+    for node in nodes:
         href = node.attrib.get(XLINK, "")
         if href and not href.startswith(("http://", "https://", "#")):
             hrefs.add(href)
@@ -201,6 +212,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("pmcid")
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--existing-xml",
+        type=Path,
+        help="Resume from an already downloaded JATS XML file instead of fetching an OA package.",
+    )
+    parser.add_argument(
+        "--asset-mode",
+        choices=("all", "figures", "none"),
+        default="all",
+        help="Download all linked assets, only figure graphics, or no linked assets.",
+    )
     args = parser.parse_args()
 
     pmcid = args.pmcid.upper()
@@ -212,38 +234,52 @@ def main() -> int:
     source_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        oa_xml = fetch(f"https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi?id={pmcid}")
-        oa_root = ET.fromstring(oa_xml)
-        package_link = ""
-        for node in oa_root.findall(".//link"):
-            if node.attrib.get("format") == "tgz":
-                package_link = node.attrib.get("href", "")
-                break
-        if not package_link:
-            raise FetchError(f"PMC OA package link not found for {pmcid}")
-        if package_link.startswith("ftp://"):
-            package_link = "https://" + package_link[len("ftp://"):]
         package_path = output_dir / f"{pmcid}.tar.gz"
-        fetch_mode = "ncbi_oa_package"
-        package_error = ""
-        try:
-            package_path.write_bytes(fetch(package_link, timeout=180))
-            with tarfile.open(package_path, "r:gz") as archive:
-                safe_extract(archive, source_dir)
-            nxml_files = list(source_dir.rglob("*.nxml"))
-            if not nxml_files:
-                raise FetchError("OA package contains no NXML file")
-            asset_status = {"downloaded": 0, "failed": 0}
-        except (FetchError, tarfile.TarError, OSError) as exc:
-            fetch_mode = "europe_pmc_fulltext_xml"
-            package_error = str(exc)
-            if package_path.exists() and package_path.stat().st_size == 0:
-                package_path.unlink()
-            xml_url = f"https://www.ebi.ac.uk/europepmc/webservices/rest/{pmcid}/fullTextXML"
-            fallback_path = source_dir / f"{pmcid}.xml"
-            fallback_path.write_bytes(fetch(xml_url, timeout=180))
-            nxml_files = [fallback_path]
-            asset_status = fetch_xml_assets(fallback_path, source_dir, pmcid)
+        if args.existing_xml:
+            existing_xml = args.existing_xml.resolve()
+            if not existing_xml.is_file():
+                raise FetchError(f"Existing XML not found: {existing_xml}")
+            package_link = ""
+            fetch_mode = "existing_xml"
+            package_error = ""
+            nxml_files = [existing_xml]
+            asset_status = fetch_xml_assets(
+                existing_xml, source_dir, pmcid, args.asset_mode
+            )
+        else:
+            oa_xml = fetch(f"https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi?id={pmcid}")
+            oa_root = ET.fromstring(oa_xml)
+            package_link = ""
+            for node in oa_root.findall(".//link"):
+                if node.attrib.get("format") == "tgz":
+                    package_link = node.attrib.get("href", "")
+                    break
+            if not package_link:
+                raise FetchError(f"PMC OA package link not found for {pmcid}")
+            if package_link.startswith("ftp://"):
+                package_link = "https://" + package_link[len("ftp://"):]
+            fetch_mode = "ncbi_oa_package"
+            package_error = ""
+            try:
+                package_path.write_bytes(fetch(package_link, timeout=180))
+                with tarfile.open(package_path, "r:gz") as archive:
+                    safe_extract(archive, source_dir)
+                nxml_files = list(source_dir.rglob("*.nxml"))
+                if not nxml_files:
+                    raise FetchError("OA package contains no NXML file")
+                asset_status = {"downloaded": 0, "failed": 0}
+            except (FetchError, tarfile.TarError, OSError) as exc:
+                fetch_mode = "europe_pmc_fulltext_xml"
+                package_error = str(exc)
+                if package_path.exists() and package_path.stat().st_size == 0:
+                    package_path.unlink()
+                xml_url = f"https://www.ebi.ac.uk/europepmc/webservices/rest/{pmcid}/fullTextXML"
+                fallback_path = source_dir / f"{pmcid}.xml"
+                fallback_path.write_bytes(fetch(xml_url, timeout=180))
+                nxml_files = [fallback_path]
+                asset_status = fetch_xml_assets(
+                    fallback_path, source_dir, pmcid, args.asset_mode
+                )
         article = parse_article(nxml_files[0], source_dir)
         article["oa_package_url"] = package_link
         article["package_path"] = str(package_path.resolve()) if package_path.is_file() else ""

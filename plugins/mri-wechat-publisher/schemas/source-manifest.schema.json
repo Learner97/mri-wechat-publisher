@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.example/mri-wechat-publisher/source-manifest.schema.json",
+  "title": "MRI WeChat source bundle manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["cycle_id", "source_kind", "identity", "main_file", "supplements"],
+  "properties": {
+    "cycle_id": {"type": "string", "pattern": "^[A-Za-z0-9._-]+$"},
+    "source_kind": {"enum": ["USER_UPLOAD", "PUBLIC_FETCH"]},
+    "identity": {"$ref": "#/$defs/identity"},
+    "main_file": {"$ref": "#/$defs/file"},
+    "supplements": {
+      "type": "array",
+      "items": {
+        "allOf": [
+          {"$ref": "#/$defs/file"},
+          {
+            "type": "object",
+            "required": ["identity"],
+            "properties": {"identity": {"$ref": "#/$defs/identity"}}
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "title", "doi", "matched_by", "verification_evidence"],
+      "properties": {
+        "status": {"const": "VERIFIED"},
+        "title": {"type": "string"},
+        "doi": {"type": "string"},
+        "matched_by": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"enum": ["doi", "title", "pmid", "publisher_link", "filename"]}
+        },
+        "verification_evidence": {"type": "string", "minLength": 1}
+      }
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["path", "size_bytes", "sha256"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "size_bytes": {"type": "integer", "minimum": 1},
+        "sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"}
+      }
+    }
+  }
+}

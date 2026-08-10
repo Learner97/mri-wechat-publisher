@@ -5,30 +5,94 @@ from __future__ import annotations
 
 import json
 import os
+import hashlib
 import shutil
 import tempfile
 import unittest
 import uuid
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import workflow_state_db as store
 
 
+def make_test_root(prefix: str) -> Path:
+    configured_parent = os.environ.get("MRI_WECHAT_TEST_DIR", "").strip()
+    if configured_parent:
+        parent = Path(configured_parent).expanduser().resolve()
+        parent.mkdir(parents=True, exist_ok=True)
+        root = parent / f"{prefix}-{uuid.uuid4().hex}"
+        root.mkdir(parents=True, exist_ok=False)
+        return root
+    return Path(tempfile.mkdtemp(prefix=f"mri-wechat-{prefix}-"))
+
+
 def write_json(path: Path, payload: dict) -> None:
+    for candidate in payload.get("candidates") or []:
+        candidate.setdefault(
+            "fulltext_access",
+            {
+                "status": "PUBLIC_FULLTEXT_CONFIRMED",
+                "checked_at": "2026-08-04T17:00:00+08:00",
+                "check_mode": "metadata_only",
+                "downloaded_content": False,
+                "confidence": "high",
+                "evidence": [{"source": "test", "signal": "fixture"}],
+                "errors": [],
+                "user_action": "test fixture",
+                "supplement": {"status": "NOT_FOUND", "url": None},
+            },
+        )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def register_test_source(
+    connection,
+    root: Path,
+    cycle_id: str,
+    doi: str,
+    title: str,
+    *,
+    source_kind: str = "PUBLIC_FETCH",
+) -> Path:
+    directory_name = "input" if source_kind == "USER_UPLOAD" else "source"
+    source_dir = root / cycle_id / directory_name
+    source_dir.mkdir(parents=True, exist_ok=True)
+    pdf_path = source_dir / "main.pdf"
+    pdf_path.write_bytes(f"%PDF-1.4\n{doi}\n{title}\n%%EOF".encode("utf-8"))
+    digest = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
+    manifest_path = source_dir / "source-manifest.json"
+    write_json(
+        manifest_path,
+        {
+            "cycle_id": cycle_id,
+            "source_kind": source_kind,
+            "identity": {
+                "status": "VERIFIED",
+                "title": title,
+                "doi": doi,
+                "matched_by": ["doi", "title"],
+                "verification_evidence": "test fixture PDF header",
+            },
+            "main_file": {
+                "path": str(pdf_path),
+                "size_bytes": pdf_path.stat().st_size,
+                "sha256": digest,
+            },
+            "supplements": [],
+        },
+    )
+    store.register_source_manifest(connection, cycle_id, manifest_path)
+    store.set_source_readiness(
+        connection, cycle_id, "READY", "methods and results available in test source"
+    )
+    return manifest_path
+
+
 class WorkflowStateDatabaseTest(unittest.TestCase):
     def test_migration_and_full_cycle(self) -> None:
-        configured_parent = os.environ.get("MRI_WECHAT_TEST_DIR", "").strip()
-        if configured_parent:
-            parent = Path(configured_parent).expanduser().resolve()
-            parent.mkdir(parents=True, exist_ok=True)
-            root = parent / f"workflow-{uuid.uuid4().hex}"
-            root.mkdir(parents=True, exist_ok=False)
-        else:
-            root = Path(tempfile.mkdtemp(prefix="mri-wechat-workflow-test-"))
+        root = make_test_root("workflow-test")
         self.addCleanup(shutil.rmtree, root, True)
         connection = None
         try:
@@ -151,6 +215,14 @@ class WorkflowStateDatabaseTest(unittest.TestCase):
             self.assertFalse(competing_claim["claimed"])
             self.assertEqual(competing_claim["status"], "WRITING")
 
+            source_manifest_path = register_test_source(
+                connection,
+                root,
+                "cycle-2026-08-04",
+                "10.1000/new",
+                "New MRI paper",
+            )
+
             article_path = root / "article.json"
             preview_path = root / "preview.html"
             write_json(
@@ -160,7 +232,14 @@ class WorkflowStateDatabaseTest(unittest.TestCase):
                     "article_id": "article-new",
                     "publication_mode": "draft_only",
                     "title": "新文章",
-                    "source": {"title": "New MRI paper", "source_id": "10.1000/new"},
+                    "source": {
+                        "title": "New MRI paper",
+                        "source_id": "10.1000/new",
+                        "doi": "10.1000/new",
+                        "evidence_level": "FULLTEXT",
+                        "fulltext_verified": True,
+                        "source_manifest": str(source_manifest_path),
+                    },
                     "sections": [],
                     "figures": [],
                     "references": [],
@@ -203,8 +282,14 @@ class WorkflowStateDatabaseTest(unittest.TestCase):
                 store.check_database(connection)["current_cycle"]["selected_doi"],
                 "10.1000/second",
             )
+            available_at = datetime.fromisoformat(
+                draft_result["next_queued"]["available_at"]
+            )
             early_queue_claim = store.claim_writing(
-                connection, "mri-09-30", "run-queue-early"
+                connection,
+                "mri-09-30",
+                "run-queue-early",
+                (available_at - timedelta(seconds=1)).isoformat(),
             )
             self.assertFalse(early_queue_claim["claimed"])
             self.assertEqual(early_queue_claim["reason"], "queued_not_ready")
@@ -252,7 +337,7 @@ class WorkflowStateDatabaseTest(unittest.TestCase):
                 connection,
                 "mri-09-30",
                 "run-2",
-                "2026-08-10T09:30:00+08:00",
+                (available_at + timedelta(seconds=1)).isoformat(),
             )
             self.assertTrue(queued_claim["claimed"])
             self.assertEqual(queued_claim["cycle"]["selected_doi"], "10.1000/second")
@@ -357,7 +442,7 @@ class WorkflowStateDatabaseTest(unittest.TestCase):
             exported_registry = json.loads(
                 Path(exported["publication_registry"]).read_text(encoding="utf-8")
             )
-            self.assertEqual(exported_state["schema_version"], 2)
+            self.assertEqual(exported_state["schema_version"], 3)
             self.assertEqual(exported_state["current_cycle"]["status"], "IDLE")
             self.assertEqual(len(exported_registry["articles"]), 2)
 
@@ -365,6 +450,93 @@ class WorkflowStateDatabaseTest(unittest.TestCase):
         finally:
             if connection is not None:
                 connection.close()
+
+    def test_user_upload_gate_blocks_then_resumes_writing(self) -> None:
+        root = make_test_root("source-gate-test")
+        self.addCleanup(shutil.rmtree, root, True)
+        connection = store.connect(root / "workflow.db")
+        self.addCleanup(connection.close)
+        store.initialize(connection)
+        recommendations = root / "recommendations.json"
+        write_json(
+            recommendations,
+            {
+                "generated_at": "2026-08-10T17:00:00+08:00",
+                "candidates": [
+                    {
+                        "choice": 1,
+                        "title": "Paywalled MRI paper",
+                        "doi": "10.1000/paywalled",
+                        "fulltext_access": {
+                            "status": "USER_UPLOAD_REQUIRED",
+                            "checked_at": "2026-08-10T17:00:00+08:00",
+                            "check_mode": "metadata_only",
+                            "downloaded_content": False,
+                            "confidence": "medium",
+                            "evidence": [{"source": "test", "signal": "closed"}],
+                            "errors": [],
+                            "user_action": "upload PDF",
+                            "supplement": {"status": "UNKNOWN", "url": None},
+                        },
+                    }
+                ],
+            },
+        )
+        store.create_cycle(connection, "paywalled-cycle", recommendations, None)
+        selected = store.select_candidate(connection, 1, None)
+        self.assertEqual(
+            selected["source_gate"]["gate_status"], "AWAITING_USER_UPLOAD"
+        )
+        blocked_claim = store.claim_writing(
+            connection, "mri-09-30", "paywalled-before-upload"
+        )
+        self.assertFalse(blocked_claim["claimed"])
+        self.assertEqual(blocked_claim["reason"], "awaiting_source_upload")
+        input_dir = Path(blocked_claim["input_dir"])
+        self.assertTrue(input_dir.is_dir())
+
+        register_test_source(
+            connection,
+            root,
+            "paywalled-cycle",
+            "10.1000/paywalled",
+            "Paywalled MRI paper",
+            source_kind="USER_UPLOAD",
+        )
+        claimed = store.claim_writing(
+            connection, "mri-09-30", "paywalled-after-upload"
+        )
+        self.assertTrue(claimed["claimed"])
+        self.assertEqual(
+            claimed["source_gate"]["gate_status"], "SOURCE_VALIDATED"
+        )
+        store.transition_cycle(
+            connection,
+            "paywalled-cycle",
+            "WRITING",
+            "CANCELLED",
+            "test complete",
+        )
+
+    def test_new_recommendation_requires_metadata_only_access_check(self) -> None:
+        root = make_test_root("access-required-test")
+        self.addCleanup(shutil.rmtree, root, True)
+        connection = store.connect(root / "workflow.db")
+        self.addCleanup(connection.close)
+        store.initialize(connection)
+        recommendations = root / "missing-access.json"
+        recommendations.write_text(
+            json.dumps(
+                {
+                    "candidates": [
+                        {"choice": 1, "title": "Unchecked MRI paper", "doi": "10.1000/unchecked"}
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(ValueError, "fulltext_access"):
+            store.create_cycle(connection, "unchecked-cycle", recommendations, None)
 
     def test_secret_payload_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "禁止把凭据"):

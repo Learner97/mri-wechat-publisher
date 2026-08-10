@@ -1,5 +1,4 @@
 interface:
-  display_name: "公众号文章质检"
-  short_description: "核对科学证据、固定结构、图片许可、引用完整性和草稿发布安全"
-  default_prompt: "使用 $qa-wechat-article 检查公众号文章并判断是否允许进入草稿箱。"
-
+  display_name: "MRI 微信文章质检"
+  short_description: "核验全文证据、结构、引用、图片与公众号草稿安全边界"
+  default_prompt: "使用 $qa-wechat-article 对文章的全文证据、结构、引用、图片与草稿安全边界进行质检。"

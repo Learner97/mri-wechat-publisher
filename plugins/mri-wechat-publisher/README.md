@@ -13,6 +13,9 @@
 - 结构化文章 JSON 和微信公众号兼容 HTML；
 - 事实、引用、图片许可与发布安全检查；
 - PubMed、OpenAlex、PMC 和 Nature 文献辅助脚本；
+- 五篇候选的元数据级全文与补充材料可用性检查，推荐阶段不下载正文；
+- 付费墙或状态未知论文仍可入选，全文状态不改变科学评分；
+- 公开来源或用户上传文件的哈希清单、身份核验与全文证据门控；
 - SQLite 推荐、去重、排队和草稿状态管理；
 - 微信公众号草稿 API；
 - 可选的已登录浏览器备用通道。
@@ -29,6 +32,22 @@ codex plugin add mri-wechat-publisher@solel-mri-plugins
 ```
 
 安装或升级后，请新建一个 Codex 任务，使新 Skill 生效。
+
+## 全文来源门控
+
+推荐检索根据 PMCID、Europe PMC 和 OpenAlex 元数据检查公开可用性，但不请求或缓存 PDF、全文 HTML/XML 正文和补充材料。状态分为：
+
+- `PUBLIC_FULLTEXT_CONFIRMED` / `PUBLIC_HTML_CONFIRMED`：选择后再获取并核验合法公开全文；
+- `USER_UPLOAD_REQUIRED`：等待用户提供其合法取得的主论文 PDF，可附补充材料；
+- `ACCESS_UNKNOWN`：元数据不足，选择后重新核验，必要时请求用户上传。
+
+全文状态不参与科学评分，也不阻止付费墙论文进入五篇候选。选择后，来源文件必须位于工作区数据目录，生成 SHA-256 清单，并通过题名、DOI/PMID 或出版商记录核验。正式成稿必须达到 `SOURCE_VALIDATED`；摘要、新闻稿和数据库简介不能冒充全文证据。
+
+```powershell
+python scripts\build_source_manifest.py --cycle-id <cycle-id> --source-kind USER_UPLOAD --main <data-dir>\<cycle-id>\input\paper.pdf --title "<paper title>" --doi "<doi>" --matched-by doi --matched-by title --verification-evidence "DOI and title verified" --output <data-dir>\<cycle-id>\source-manifest.json
+python scripts\workflow_state_db.py --db <data-dir>\workflow.db register-source-manifest --cycle-id <cycle-id> --manifest <data-dir>\<cycle-id>\source-manifest.json
+python scripts\workflow_state_db.py --db <data-dir>\workflow.db source-readiness --cycle-id <cycle-id> --decision READY --detail "Identity and full text verified"
+```
 
 ## Python 环境
 
@@ -59,6 +78,8 @@ py -3.12 -m venv .venv
 ```powershell
 $env:MRI_WECHAT_DATA_DIR = 'D:\Analysis\mri-wechat-data'
 ```
+
+为兼容早期本地版本，如果插件自己的 `output/workflow.db` 已存在且工作区尚无数据库，程序会继续使用该旧库。新安装不会在插件目录创建状态库；设置 `MRI_WECHAT_DATA_DIR` 可始终覆盖自动选择。
 
 数据库只保存非敏感工作流元数据。不要把数据库或文章输出写入插件安装目录。
 
@@ -99,6 +120,7 @@ python <plugin-root>\scripts\wechat_draft_api.py article.json article.html --cov
 
 ```powershell
 python scripts\self_test.py
+python scripts\test_source_availability.py
 python scripts\test_workflow_state_db.py
 python scripts\validate_article.py examples\phase1-test-article.json
 ```
@@ -112,6 +134,7 @@ python scripts\workflow_state_db.py check
 python scripts\workflow_state_db.py recommendation-exclusions
 python scripts\workflow_state_db.py select-order --choices 2,3
 python scripts\workflow_state_db.py queue-status
+python scripts\workflow_state_db.py source-status --cycle-id <cycle-id>
 ```
 
 ## 安全边界
@@ -141,6 +164,9 @@ The plugin is draft-only. It does not implement automatic publishing, mass sendi
 - Structured article JSON and WeChat-compatible HTML;
 - Evidence, citation, image-license, and publishing-safety checks;
 - Helper scripts for PubMed, OpenAlex, PMC, and Nature sources;
+- Metadata-only full-text and supplement availability checks for the final five candidates, with no source download during recommendation;
+- Scientific ranking that remains independent from access status, so paywalled and unknown-access papers stay eligible;
+- Hashed source manifests, paper-identity verification, and evidence gates for public or user-provided files;
 - SQLite-based recommendation, deduplication, queue, and draft-state tracking;
 - WeChat Official Account draft API integration;
 - An optional fallback through an already signed-in browser.
@@ -157,6 +183,12 @@ codex plugin add mri-wechat-publisher@solel-mri-plugins
 ```
 
 Start a new Codex task after installation or upgrade so that new Skills are loaded.
+
+## Full-text source gate
+
+Recommendation checks use PMCID, Europe PMC, and OpenAlex metadata without requesting or caching PDFs, full-text HTML/XML bodies, or supplements. `PUBLIC_FULLTEXT_CONFIRMED` and `PUBLIC_HTML_CONFIRMED` sources are fetched only after selection. `USER_UPLOAD_REQUIRED` and `ACCESS_UNKNOWN` preserve a path for the user to provide a legally obtained main PDF and any supplements.
+
+Access status does not affect scientific ranking. Selected files stay in the workspace data directory, receive a SHA-256 manifest, and must match the selected title, DOI/PMID, or publisher record. Formal writing requires `SOURCE_VALIDATED`; abstracts, press releases, and database summaries cannot substitute for full-text evidence.
 
 ## Python environment
 
@@ -187,6 +219,8 @@ Override the location when needed:
 ```powershell
 $env:MRI_WECHAT_DATA_DIR = 'D:\Analysis\mri-wechat-data'
 ```
+
+For backward compatibility, an existing legacy `output/workflow.db` inside the plugin is reused only when the workspace has no database. New installations do not create runtime state inside the plugin, and `MRI_WECHAT_DATA_DIR` always overrides automatic selection.
 
 The database stores non-secret workflow metadata only. Do not write databases or article output into the installed plugin directory.
 
@@ -229,6 +263,7 @@ These commands make no network request and do not write a live WeChat draft:
 
 ```powershell
 python scripts\self_test.py
+python scripts\test_source_availability.py
 python scripts\test_workflow_state_db.py
 python scripts\validate_article.py examples\phase1-test-article.json
 ```
@@ -242,6 +277,7 @@ python scripts\workflow_state_db.py check
 python scripts\workflow_state_db.py recommendation-exclusions
 python scripts\workflow_state_db.py select-order --choices 2,3
 python scripts\workflow_state_db.py queue-status
+python scripts\workflow_state_db.py source-status --cycle-id <cycle-id>
 ```
 
 ## Safety boundaries
