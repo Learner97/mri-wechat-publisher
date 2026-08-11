@@ -7,6 +7,8 @@
 
 插件只支持保存草稿，不包含自动发表、群发、删除或覆盖线上内容的功能。
 
+当前稳定版本：[v0.2.0](https://github.com/Learner97/mri-wechat-publisher/releases/tag/v0.2.0)。
+
 ## 能力
 
 - 固定五段式中文科学文章规范；
@@ -157,6 +159,8 @@ python scripts\workflow_state_db.py source-status --cycle-id <cycle-id>
 `mri-wechat-publisher` is a Codex workflow plugin for MRI, cognitive neuroscience, and related biomedical papers. It converts verified source material into Chinese paper-and-method articles, validates structure, evidence, figure licensing, and publishing safety, renders WeChat-compatible HTML, and can save an explicitly approved draft.
 
 The plugin is draft-only. It does not implement automatic publishing, mass sending, deletion, or overwriting of live content.
+
+Current stable release: [v0.2.0](https://github.com/Learner97/mri-wechat-publisher/releases/tag/v0.2.0).
 
 ## Capabilities
 

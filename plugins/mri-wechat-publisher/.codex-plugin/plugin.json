@@ -1,6 +1,6 @@
 {
   "name": "mri-wechat-publisher",
-  "version": "0.1.0+codex.20260811005421",
+  "version": "0.2.0+codex.20260811022614",
   "description": "Recommend MRI papers with metadata-only full-text checks, gate formal writing on verified sources, format evidence-grounded Chinese articles for WeChat, and save reviewed drafts without publishing.",
   "author": {
     "name": "Solel",
