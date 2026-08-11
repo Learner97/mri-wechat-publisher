@@ -2407,7 +2407,8 @@ def set_artifacts(
         raise ValueError("正式草稿必须设置 source.fulltext_verified=true。")
     article_manifest = Path(str(source_payload.get("source_manifest") or ""))
     if not article_manifest.is_absolute():
-        article_manifest = (Path(article_json_path).resolve().parent / article_manifest).resolve()
+        article_manifest = Path(article_json_path).resolve().parent / article_manifest
+    article_manifest = article_manifest.resolve()
     timestamp = now_iso()
     with immediate_transaction(connection):
         cycle = connection.execute(
@@ -2424,7 +2425,15 @@ def set_artifacts(
                 f"全文证据尚未通过 SOURCE_VALIDATED，当前来源状态：{actual}"
             )
         gate_manifest = Path(str(gate["manifest_path"] or "")).resolve()
-        if not article_manifest.is_file() or article_manifest != gate_manifest:
+        manifests_match = False
+        if article_manifest.is_file() and gate_manifest.is_file():
+            try:
+                manifests_match = article_manifest.samefile(gate_manifest)
+            except OSError:
+                manifests_match = os.path.normcase(str(article_manifest)) == os.path.normcase(
+                    str(gate_manifest)
+                )
+        if not manifests_match:
             raise ValueError("文章引用的 source_manifest 与已验证来源清单不一致。")
         connection.execute(
             """

@@ -222,6 +222,12 @@ class WorkflowStateDatabaseTest(unittest.TestCase):
                 "10.1000/new",
                 "New MRI paper",
             )
+            source_manifest_reference = (
+                source_manifest_path.parent
+                / ".."
+                / source_manifest_path.parent.name
+                / source_manifest_path.name
+            )
 
             article_path = root / "article.json"
             preview_path = root / "preview.html"
@@ -238,7 +244,9 @@ class WorkflowStateDatabaseTest(unittest.TestCase):
                         "doi": "10.1000/new",
                         "evidence_level": "FULLTEXT",
                         "fulltext_verified": True,
-                        "source_manifest": str(source_manifest_path),
+                        # The article may use a different textual path for the same file.
+                        # The workflow gate must compare file identity cross-platform.
+                        "source_manifest": str(source_manifest_reference),
                     },
                     "sections": [],
                     "figures": [],
