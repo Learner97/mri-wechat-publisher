@@ -23,6 +23,8 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from source_availability import enrich_payload
+
 
 USER_AGENT = "mri-wechat-publisher/0.1 (+https://github.com/Learner97/mri-wechat-publisher)"
 CONTACT_EMAIL = os.environ.get("NCBI_EMAIL", "").strip() or "Learner97@users.noreply.github.com"
@@ -286,6 +288,8 @@ def openalex_search(date_from: str) -> list[dict[str, Any]]:
                 "cited_by_count": work.get("cited_by_count", 0) or 0,
                 "sources": ["OpenAlex"],
                 "publisher_url": work.get("doi") or work.get("id", ""),
+                "open_access": work.get("open_access") or {},
+                "best_oa_location": work.get("best_oa_location") or {},
             })
         time.sleep(0.25)
     return records
@@ -301,7 +305,10 @@ def merge_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
             merged[key] = record
             continue
         target = merged[key]
-        for field in ("doi", "pmid", "pmcid", "abstract", "publisher_url", "publication_date"):
+        for field in (
+            "doi", "pmid", "pmcid", "abstract", "publisher_url",
+            "publication_date", "open_access", "best_oa_location",
+        ):
             if not target.get(field) and record.get(field):
                 target[field] = record[field]
         if len(record.get("authors", [])) > len(target.get("authors", [])):
@@ -343,7 +350,15 @@ def score_record(record: dict[str, Any], today: date) -> dict[str, Any]:
     journal_score = JOURNAL_SCORES.get(norm_text(record.get("journal", "")), 0)
     method_score = min(20, 4 * sum(term in text for term in METHOD_TERMS))
     recent = recency_score(record.get("publication_date", ""), today)
-    access = min(10, (4 if abstract else 0) + (3 if record.get("doi") else 0) + (2 if record.get("pmcid") else 0) + (1 if record.get("pmid") else 0))
+    # This component measures metadata traceability, not whether the full text is
+    # open. PMCID/OA signals are deliberately excluded so access status cannot
+    # change scientific ranking.
+    access = min(
+        10,
+        (4 if abstract else 0)
+        + (3 if record.get("doi") else 0)
+        + (1 if record.get("pmid") else 0),
+    )
     categories = []
     if any(term in text for term in COGNITION_TERMS):
         categories.append("cognition")
@@ -371,6 +386,17 @@ def main() -> int:
     )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--limit", type=int, default=50)
+    parser.add_argument(
+        "--availability-limit",
+        type=int,
+        default=5,
+        help="metadata-only full-text checks for the first N ranked records; 0 checks all",
+    )
+    parser.add_argument(
+        "--skip-availability-check",
+        action="store_true",
+        help="skip access probes for troubleshooting only; final recommendation pools still require them",
+    )
     args = parser.parse_args()
 
     try:
@@ -388,6 +414,7 @@ def main() -> int:
             and record.get("publication_date", "") >= date_from
         ]
         scored.sort(key=lambda item: (item["total_score"], item.get("publication_date", ""), item.get("cited_by_count", 0)), reverse=True)
+        returned = scored[: args.limit]
         payload = {
             "status": "SEARCH_COMPLETED",
             "date_from": date_from,
@@ -395,8 +422,17 @@ def main() -> int:
             "source_counts": {"pubmed": len(pubmed_records), "openalex": len(openalex_records)},
             "deduplicated_count": len(records),
             "eligible_count": len(scored),
-            "records": scored[: args.limit],
+            "records": returned,
         }
+        if not args.skip_availability_check:
+            payload = enrich_payload(payload, limit=args.availability_limit)
+        else:
+            payload["fulltext_check_policy"] = {
+                "mode": "skipped",
+                "content_downloaded": False,
+                "scientific_score_independent": True,
+                "checked_record_count": 0,
+            }
         output = args.output.resolve()
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -407,6 +443,8 @@ def main() -> int:
             "deduplicated_count": payload["deduplicated_count"],
             "eligible_count": payload["eligible_count"],
             "returned_count": len(payload["records"]),
+            "access_checked_count": payload["fulltext_check_policy"]["checked_record_count"],
+            "content_downloaded": False,
         }, ensure_ascii=False, indent=2))
         return 0
     except (SearchError, ET.ParseError, json.JSONDecodeError, OSError, ValueError) as exc:

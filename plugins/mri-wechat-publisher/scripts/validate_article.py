@@ -115,15 +115,6 @@ def validate_article(article: dict[str, Any], article_path: Path | None = None) 
             elif len(parts[1]) > 20:
                 errors.append("title 的内容主标题（` | ` 之后）超过 20 个字符。")
 
-    source = article.get("source")
-    if not isinstance(source, dict):
-        errors.append("source 必须是对象。")
-    else:
-        if not str(source.get("title", "")).strip():
-            errors.append("source.title 不能为空。")
-        if not str(source.get("source_id", "")).strip():
-            errors.append("source.source_id 不能为空；可使用 DOI、PMID 或内部测试标识。")
-
     cover = article.get("cover")
     if cover is not None:
         if not isinstance(cover, dict):
@@ -132,6 +123,41 @@ def validate_article(article: dict[str, Any], article_path: Path | None = None) 
             for field in ("path", "alt", "source_note"):
                 if not isinstance(cover.get(field), str) or not cover[field].strip():
                     errors.append(f"cover.{field} 不能为空。")
+            cover_path = str(cover.get("path", "")).strip()
+            if cover_path and not re.match(r"^https?://", cover_path, re.IGNORECASE):
+                cover_base = article_path.parent if article_path else Path.cwd()
+                resolved_cover = (cover_base / cover_path).resolve()
+                if not resolved_cover.is_file():
+                    errors.append(f"封面文件不存在：{resolved_cover}")
+
+    source = article.get("source")
+    if not isinstance(source, dict):
+        errors.append("source 必须是对象。")
+    else:
+        if not str(source.get("title", "")).strip():
+            errors.append("source.title 不能为空。")
+        if not str(source.get("source_id", "")).strip():
+            errors.append("source.source_id 不能为空；可使用 DOI、PMID 或内部测试标识。")
+        evidence_level = str(source.get("evidence_level") or "").strip().upper()
+        if evidence_level not in {"FULLTEXT", "TEST_FIXTURE"}:
+            errors.append("source.evidence_level 必须为 FULLTEXT 或 TEST_FIXTURE。")
+        source_manifest = str(source.get("source_manifest") or "").strip()
+        if not source_manifest:
+            errors.append("source.source_manifest 不能为空。")
+        is_test_fixture = evidence_level == "TEST_FIXTURE"
+        if is_test_fixture:
+            if not str(article.get("article_id") or "").startswith("phase1-test-"):
+                errors.append("TEST_FIXTURE 仅允许用于 phase1-test-* 内部测试文章。")
+        else:
+            if source.get("fulltext_verified") is not True:
+                errors.append("正式文章必须设置 source.fulltext_verified=true。")
+            if source_manifest:
+                manifest_path = Path(source_manifest)
+                if not manifest_path.is_absolute():
+                    manifest_base = article_path.parent if article_path else Path.cwd()
+                    manifest_path = (manifest_base / manifest_path).resolve()
+                if not manifest_path.is_file():
+                    errors.append(f"全文来源清单不存在：{manifest_path}")
 
     sections = article.get("sections")
     if not isinstance(sections, list):

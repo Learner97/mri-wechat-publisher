@@ -178,6 +178,13 @@ def main() -> int:
         else None
     )
     rendered = render_article(article, asset_sources)
+    if args.embed_local_assets:
+        rendered = (
+            '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">'
+            '<meta name="viewport" content="width=device-width,initial-scale=1">'
+            '<title>' + html.escape(article["title"]) + '</title></head>'
+            '<body style="margin:0;background:#fff;">' + rendered + '</body></html>'
+        )
     output_path = args.output.resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(rendered, encoding="utf-8")

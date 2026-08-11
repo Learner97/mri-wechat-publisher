@@ -1,6 +1,6 @@
 ---
 name: run-mri-wechat-workflow
-description: Orchestrate an evidence-grounded MRI or cognitive-neuroscience paper from source selection through hybrid paper-and-method writing, QA, WeChat formatting, and draft-box delivery. Use when the user wants the complete publication-preparation workflow or asks to move an article between workflow stages; never use it to publish or mass-send automatically.
+description: Orchestrate an evidence-grounded MRI or cognitive-neuroscience paper from ranked recommendation and metadata-only full-text availability checks through source upload, full-text validation, hybrid paper-and-method writing, QA, WeChat formatting, and draft-box delivery. Use for the complete publication-preparation workflow or any transition between recommendation, source, writing, review, and draft stages; never publish or mass-send automatically.
 ---
 
 # Run MRI WeChat Workflow
@@ -15,37 +15,124 @@ Store persistent state outside the installed plugin. Use `MRI_WECHAT_DATA_DIR` w
 
 Use `<plugin-root>/scripts/workflow_state_db.py` with `<data-dir>/workflow.db` as the source of truth. Do not edit `<data-dir>/automation-workflow-state.json` or `<data-dir>/publication-registry.json` directly; they are compatibility snapshots generated after each committed database change.
 
-- Read permanent and five-round cooldown exclusions with `recommendation-exclusions`, then create a recommendation cycle with `create-cycle`.
-- Record one explicit choice with `select`, or an ordered multi-selection such as `2,3` with `select-order --choices 2,3`.
-- Treat selected and queued papers as permanently excluded. Treat unselected candidates as ineligible for five complete recommendation rounds, then allow them to reappear if their new score warrants it.
-- The 09:30 task must atomically acquire work with `claim-writing`; if it returns `claimed=false`, including `queued_not_ready`, do not write an article before the returned `available_at`.
-- Record verified article artifacts with `set-artifacts` only after `QA_PASSED`.
-- After explicit draft approval, call `approve-draft`; after a verified draft save, call `record-draft`.
-- Record manual publication and backend-export statistics with `record-publication` and `record-stats`.
-- Never write AppID, AppSecret, access tokens, cookies, or other credentials to SQLite, snapshots, or job logs.
+- Read permanent and five-round cooldown exclusions with `recommendation-exclusions`.
+- Create a recommendation cycle only with `create-cycle`.
+- Record one choice with `select`, or an ordered multi-selection with `select-order --choices 2,3`.
+- Acquire scheduled writing atomically with `claim-writing`.
+- Record validated sources with `register-source-manifest` and `source-readiness`.
+- Record article artifacts only after `QA_PASSED` and `SOURCE_VALIDATED`.
+- Require explicit user approval before saving a draft.
+- Never store AppID, AppSecret, access tokens, cookies, or other credentials in SQLite, snapshots, manifests, or logs.
 
-## Required sequence
+## Recommendation stage
 
-1. Record the selected paper, DOI, source files, publication date, journal, access status, and user constraints.
-2. Invoke `write-mri-paper-method-article` to create the evidence map and five-section article JSON.
-3. Invoke `qa-wechat-article`; stop if it does not return `QA_PASSED`.
-4. Invoke `format-wechat-article` and preserve the validated article JSON as the source of truth.
-5. Show the user the title, digest, section inventory, figure inventory, and QA result. Obtain explicit approval before writing to the live draft box.
-6. Invoke `save-wechat-draft` with `draft_only=true`.
-7. Persist the verified draft receipt through `<plugin-root>/scripts/workflow_state_db.py record-draft`. If it returns `next_queued`, report the next queued paper; do not fetch its full text until a later `claim-writing` succeeds.
-8. Return the transport used, draft identifier or visible draft title, timestamp, and any manual follow-up.
+1. Retrieve exclusions from SQLite before searching.
+2. Search recent MRI, cognitive-neuroscience, connectome, neuroimaging-AI, disease, medical, and biological papers.
+3. Rank scientific value independently from access status.
+4. For the final five candidates, run a metadata-only source check:
 
-## State rules
+```powershell
+python "<plugin-root>\scripts\source_availability.py" `
+  --input "<data-dir>\recommendations-raw.json" `
+  --output "<data-dir>\recommendations-checked.json"
+```
 
-Use only these ordered states in SQLite:
+The check may query PubMed/PMC, Europe PMC, OpenAlex, and publisher metadata. It must not download or persist a PDF, full-text HTML/XML body, or supplement.
 
-`AWAITING_SELECTION → SELECTED → WRITING → AWAITING_DRAFT_APPROVAL → DRAFT_SAVED → PUBLISHED`
+Each final candidate must contain `fulltext_access` with one of:
 
-Keep evidence mapping and writing stages in the job record and artifact paths. Do not skip `QA_PASSED` or explicit user draft approval. Do not execute publishing, free-publishing, mass-send, deletion, or replacement of existing live content.
+- `PUBLIC_FULLTEXT_CONFIRMED`
+- `PUBLIC_HTML_CONFIRMED`
+- `USER_UPLOAD_REQUIRED`
+- `ACCESS_UNKNOWN`
+
+`create-cycle` must reject a new recommendation pool whose candidates lack this metadata-only check. Paywalled or unknown-access papers remain eligible for the top five and keep their scientific score.
+
+Display every candidate with title, journal, publication date, scientific score, recommendation reason, method focus, DOI, PubMed link, full-text status, supplement status, and required user action. Do not compress the notification to titles only.
+
+## Selection and source routing
+
+After selection, inspect the returned `source_gate`:
+
+- `PUBLIC_SOURCE_PENDING_FETCH`: wait until the scheduled preparation task, then fetch the confirmed public source.
+- `AWAITING_USER_UPLOAD`: create/use the returned `input_dir`, tell the user the exact source deadline, and request the legally obtained main PDF plus any supplements.
+- `SOURCE_FILES_READY`: source files and identity manifest exist but evidence sufficiency still needs review.
+- `SOURCE_VALIDATED`: full-text evidence is sufficient for writing.
+- `EVIDENCE_BLOCKED`: stop and report the missing or mismatched evidence.
+
+Never replace a selected paper silently. If a source is missing at the deadline, preserve its queue position and ask whether to wait, defer it behind the next ready paper, cancel it, or explicitly create a separately labelled abstract-only brief.
+
+## User-uploaded source bundle
+
+Store user files only under:
+
+```text
+<data-dir>/<cycle-id>/input/
+```
+
+Store publicly fetched files only under:
+
+```text
+<data-dir>/<cycle-id>/source/
+```
+
+Before registration:
+
+1. Verify the main PDF opens and matches the selected title, DOI, PMID, or publisher record.
+2. Verify each supplement belongs to the same paper.
+3. Record SHA-256, size, identity signals, and verification evidence.
+4. Build the manifest with `scripts/build_source_manifest.py`.
+5. Register it with:
+
+```powershell
+python "<plugin-root>\scripts\workflow_state_db.py" `
+  --db "<data-dir>\workflow.db" register-source-manifest `
+  --cycle-id <cycle-id> `
+  --manifest <source-manifest.json>
+```
+
+Use lowercase `--matched-by doi`, `title`, `pmid`, `publisher_link`, or `filename` when building the manifest.
+
+The raw files remain local and must never be uploaded to WeChat or redistributed.
+
+## Scheduled preparation
+
+Interpret 09:30 as the delivery target. Use the default preparation sequence:
+
+1. 08:00: lock and preflight the source bundle.
+2. 08:10: call `claim-writing`.
+3. If the gate is `PUBLIC_SOURCE_PENDING_FETCH`, fetch the public full text now, not during search.
+4. If the gate is `SOURCE_FILES_READY`, read the registered user or public bundle.
+5. Confirm that Methods and Results are readable and that supplement-dependent claims have the needed supplement.
+6. Mark sufficient evidence:
+
+```powershell
+python "<plugin-root>\scripts\workflow_state_db.py" `
+  --db "<data-dir>\workflow.db" source-readiness `
+  --cycle-id <cycle-id> --decision READY `
+  --detail "Methods, Results and required supplements verified"
+```
+
+7. If evidence is insufficient, use `--decision BLOCKED`; do not draft a full article from the abstract.
+8. Invoke `write-mri-paper-method-article`, then `qa-wechat-article`, then `format-wechat-article`.
+9. Call `set-artifacts` only after both `SOURCE_VALIDATED` and `QA_PASSED`.
+10. Present the draft and obtain explicit approval before `save-wechat-draft`.
+11. Persist the verified draft receipt with `<plugin-root>/scripts/workflow_state_db.py --db <data-dir>/workflow.db record-draft`; report `next_queued` without fetching its full text early.
+
+## Evidence rules
+
+- A formal article requires a verified main full text.
+- Supplements are required only when a central method or result depends on them; otherwise record their absence as a warning and avoid unsupported claims.
+- Bind every formal `article.json` to the registered source manifest.
+- Support every quantitative result, parameter, anatomical claim, figure, and limitation with a full-text or supplement locator.
+- Keep author claims, direct evidence, and editorial inference distinct.
+- Never turn correlation into causation or infer undisclosed parameters.
 
 ## Failure behavior
 
-- Keep the article in the last valid state.
-- Report actionable API error codes without printing tokens or secrets.
-- If the draft API is unavailable, switch to the logged-in browser path only when the user has already approved draft creation.
-- Never interpret a successful local HTML render as a successful WeChat draft save.
+- Keep the cycle in its last valid state.
+- Return `awaiting_source_upload` when user files are required.
+- Return `EVIDENCE_BLOCKED` when the source is mismatched, unreadable, or insufficient.
+- Report actionable API errors without secrets.
+- Never interpret a successful local render as a successful WeChat draft save.
+- Never publish, free-publish, mass-send, delete, or overwrite live content.

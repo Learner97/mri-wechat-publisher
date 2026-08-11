@@ -352,7 +352,7 @@ def main() -> int:
         cover_path = resolve_required_cover(article, article_path, args.cover)
 
         plan = {
-            "status": "DRY_RUN_READY" if not args.execute else "EXECUTION_REQUESTED",
+            "status": "EXECUTION_REQUESTED" if args.execute else "DRY_RUN_READY",
             "transport": "wechat_draft_api",
             "publication_mode": "draft_only",
             "article_id": article["article_id"],
@@ -360,6 +360,8 @@ def main() -> int:
             "credential_presence": credential_presence(),
             "inline_image_count": len(article.get("figures", [])),
             "cover_configured": True,
+            "cover_ready": True,
+            "errors": [],
             "operations": ["stable_token", "upload_content_images", "upload_cover_material", "add_draft"],
         }
         if not args.execute:
@@ -379,6 +381,9 @@ def main() -> int:
         rewritten_content, uploaded_images = rewrite_inline_images(token, article, article_path, content)
         thumb_media_id = upload_cover_material(token, cover_path)
         draft_media_id = add_draft(token, article, rewritten_content, thumb_media_id)
+        verification_result = get_draft(token, draft_media_id)
+        if article["title"] not in verification_result.get("titles", []):
+            raise WeChatApiError("草稿新增后回读成功，但回读标题与本地文章标题不一致。")
 
         receipt = {
             "status": "DRAFT_SAVED",
@@ -389,6 +394,11 @@ def main() -> int:
             "draft_media_id": draft_media_id,
             "uploaded_inline_images": uploaded_images,
             "saved_at_utc": datetime.now(timezone.utc).isoformat(),
+            "verification": {
+                "status": "DRAFT_GET_PASSED",
+                "title_matched": True,
+                **verification_result,
+            },
         }
         write_receipt(args.receipt.resolve(), receipt)
         print(json.dumps(receipt, ensure_ascii=False, indent=2))
