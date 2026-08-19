@@ -9,7 +9,15 @@
 
 插件只支持在用户明确批准后保存到公众号草稿箱，不包含自动发表、群发、删除或覆盖线上内容的功能。
 
-当前稳定版本：[v0.2.0](https://github.com/Learner97/mri-wechat-publisher/releases/tag/v0.2.0)。
+当前稳定版本：[v0.8.2](https://github.com/Learner97/mri-wechat-publisher/releases/tag/v0.8.2)。
+
+### v0.8.2 更新
+
+- 新文章使用 `schema_version: 8`，正文采用“研究速览—引言—方法—结果—结果解读—结语”结构；
+- 顶部灰色导读卡先回答“为什么值得看”，再根据论文自身特点选择直接陈述、现象反差、开放问题或自问自答。问句不是默认形式，批量写作还会检查重复句法和问号模式；
+- “研究速览”负责交代研究怎样开展及主要发现，避免与灰框重复，也不提前堆叠详细统计量；
+- 结语中的 MRI 或研究设计启示改为真正可选：只有能提供论文特异的新信息时才自然写入，不再默认生成第二段或使用固定过渡句；
+- 强化 `method_map`、证据定位、统计量追踪、因果措辞和批量反模板检查，同时保持微信公众号接口仅保存草稿、不自动发表。
 
 ### 全文来源与证据门控
 
@@ -66,7 +74,15 @@ WECHAT_APP_SECRET=<your-app-secret>
 
 The plugin can save an explicitly approved draft, but it does not implement automatic publishing, mass sending, deletion, or overwriting of live content.
 
-Current stable release: [v0.2.0](https://github.com/Learner97/mri-wechat-publisher/releases/tag/v0.2.0).
+Current stable release: [v0.8.2](https://github.com/Learner97/mri-wechat-publisher/releases/tag/v0.8.2).
+
+### What's new in v0.8.2
+
+- New articles use `schema_version: 8` with Research Overview, Introduction, Methods, Results, Result Interpretation, and Closing;
+- The grey digest first establishes why the paper is worth reading, then chooses a paper-specific form such as a direct statement, contrast, open question, or question with an answer. Questions are not the default, and batch QA checks repeated syntax and question patterns;
+- Research Overview explains how the study was conducted and what it found without repeating the digest or previewing a list of detailed statistics;
+- MRI or study-design implications in the Closing are genuinely optional. They appear only when they add paper-specific information, without a mandatory second paragraph or fixed transition phrase;
+- Stronger method maps, evidence locators, statistic traceability, causal-language checks, and batch anti-template QA retain the existing draft-only WeChat safety boundary.
 
 ### Full-text source and evidence gate
 
