@@ -11,8 +11,10 @@
 
 ## 能力
 
-- 固定五段式中文科学文章规范；
+- “研究速览—引言—方法—结果—结果解读—结语”中文科学文章规范；灰框提供阅读动机，研究速览交代方法与发现，结语不强制附加方法启示；
 - 结构化文章 JSON 和微信公众号兼容 HTML；
+- 核心结果图优先，组合图可裁切或拆分；正文仅显示简洁图注，来源、许可和移动端策略保留在内部质检记录；
+- HTML调用设备系统字体，插件生成的封面使用已登记的开源字体；
 - 事实、引用、图片许可与发布安全检查；
 - PubMed、OpenAlex、PMC 和 Nature 文献辅助脚本；
 - 五篇候选的元数据级全文与补充材料可用性检查，推荐阶段不下载正文；
@@ -50,6 +52,38 @@ python scripts\build_source_manifest.py --cycle-id <cycle-id> --source-kind USER
 python scripts\workflow_state_db.py --db <data-dir>\workflow.db register-source-manifest --cycle-id <cycle-id> --manifest <data-dir>\<cycle-id>\source-manifest.json
 python scripts\workflow_state_db.py --db <data-dir>\workflow.db source-readiness --cycle-id <cycle-id> --decision READY --detail "Identity and full text verified"
 ```
+
+## 文章结构与版本兼容
+
+新生成的文章使用 `schema_version: 8`，正文一级结构为：
+
+1. 研究速览；
+2. 引言；
+3. 方法；
+4. 结果；
+5. 结果解读；
+6. 结语。
+
+版本8以“研究速览”取代摘要。浅灰色 digest 先找到每篇论文最有辨识度的阅读入口，再决定采用直接陈述、现象反差、观察、开放问题或自问自答；问句不是默认形式，这些形式也不是轮换模板。批量写作还要横向检查开头语法、问号位置和两句之间的关系。研究速览再用灵活的短篇幅交代研究怎样开展及主要发现，但不写死字段或字数，也不提前罗列 t、p、OR、β 等详细统计量。
+
+结果解读说明结果意味着什么、不同结果之间如何联系及确实影响理解的解释范围，不模仿 SCI Discussion，也不把结果换一种说法重写。相关分析、空间对应、PLS 和基因富集保持关联性措辞，不写成直接因果或机制证据。版本8不单独设置“方法启示”；结语首先说明研究增加的认识，只有当具体分析逻辑带来额外信息时才自然写入，不默认生成第二段。
+
+修改旧稿时，未在用户范围内的研究速览或摘要、引言、方法和结果保持不变。编辑优先级为“删除多余表达—保留自然原句—调整句序和衔接—局部补充解释—必要时重写”，不主动把原文统一润色成过度工整的 AI 科研文风。
+
+写作与 QA 会区分研究直接结果、作者解释和编辑说明。版本5至版本8要求分析进入内部 `method_map`，按 `core`、`supporting`、`routine` 标记重要性，记录数据、处理步骤、统计检验、必要输出和研究材料定位，并生成 `method-map.md` 供人工核查。内部字段不会显示在正文中；正文整合主文、补充材料、附录和已核验版本，不暴露检索、核查或材料比较过程。
+
+方法部分突出数据、分析思路、关键步骤和核心参数。完整软件、命令和参数来源保留在 `method_map`；公开正文不连续罗列软件版本、算法、步长、流线长度、流线数量和常规阈值。结果部分只保留决定主要结论成立与否的统计量，次要数值和富集条目按方向、范围或主要主题概括。
+
+常规未报告参数默认省略，也不主动写“未报告”“未进一步说明”或“来源材料未提供”。只有缺失信息直接影响主要结论解释，或用户明确要求审查方法完整性时才指出。正文优先使用“研究”、具体数据/模型主语或省略主语；“作者”主要用于讨论观点和机制解释，并避免“该模块”“该步骤输出”“分析链”等技术报告式元语言。
+
+图片的来源、许可和 `mobile_display` 策略保存在 JSON、图片清单和 QA 记录中，公开 HTML 只显示简洁图注。信息过密的组合图使用裁切、拆分或关键面板选择，同时保留原图号和面板。总字数、章节占比和配图数量不设硬性目标；系统只报告各章节统计，不根据比例阻断、警告、补写或删减正文。
+
+`schema_version: 1` 至 `schema_version: 7` 仅用于兼容已有文章。旧文章仍可校验、渲染和进入原有草稿流程；新文章必须使用版本8。此次兼容不会修改历史 JSON、已生成 HTML、SQLite 记录或公众号草稿。
+
+HTML恢复原始设备字体栈：`-apple-system`、`BlinkMacSystemFont`、`Segoe UI`、`PingFang SC`、`Hiragino Sans GB`、`Microsoft YaHei` 和通用无衬线回退。这里只调用用户设备已经安装的字体，不复制、打包、嵌入、下载或再分发这些系统字体文件。插件生成封面继续使用随插件登记的 Noto Sans SC 及 SIL Open Font License 1.1；合法复用的论文原始栅格图不修改数据和图内文字。`digest` 同时作为公众号草稿元数据，并在作者行与“研究速览”之间以浅灰色导读卡显示一次。
+
+正文按科学问题组织段落，不固定各节篇幅或段落数。连续步骤或结果若回答同一问题，应合并为完整的分析单元；只负责报幕的短过渡句不单独成段。群体推断、外部图谱、横断面设计和临床适用范围只在确实影响理解时进入结果解读，并直接陈述数据关系。默认不列举研究未测量、未纳入或未检验的内容；必要范围说明与其限定的主张放在一起，不在段尾连续追加免责声明。
+
 
 ## Python 环境
 
@@ -164,8 +198,10 @@ Current stable release: [v0.2.0](https://github.com/Learner97/mri-wechat-publish
 
 ## Capabilities
 
-- A fixed five-section Chinese scientific article contract;
+- A Chinese scientific article contract with Research Overview, Introduction, Methods, Results, Result Interpretation, and Closing;
 - Structured article JSON and WeChat-compatible HTML;
+- Concise public figure captions with provenance and licensing retained in internal QA records;
+- Open-source-preferred HTML typography and an OFL-licensed bundled font for generated covers;
 - Evidence, citation, image-license, and publishing-safety checks;
 - Helper scripts for PubMed, OpenAlex, PMC, and Nature sources;
 - Metadata-only full-text and supplement availability checks for the final five candidates, with no source download during recommendation;
@@ -193,6 +229,16 @@ Start a new Codex task after installation or upgrade so that new Skills are load
 Recommendation checks use PMCID, Europe PMC, and OpenAlex metadata without requesting or caching PDFs, full-text HTML/XML bodies, or supplements. `PUBLIC_FULLTEXT_CONFIRMED` and `PUBLIC_HTML_CONFIRMED` sources are fetched only after selection. `USER_UPLOAD_REQUIRED` and `ACCESS_UNKNOWN` preserve a path for the user to provide a legally obtained main PDF and any supplements.
 
 Access status does not affect scientific ranking. Selected files stay in the workspace data directory, receive a SHA-256 manifest, and must match the selected title, DOI/PMID, or publisher record. Formal writing requires `SOURCE_VALIDATED`; abstracts, press releases, and database summaries cannot substitute for full-text evidence.
+
+## Article structure and compatibility
+
+New articles use `schema_version: 8` with Research Overview, Introduction, Methods, Results, Result Interpretation, and Closing. The grey digest starts from the paper-specific reason to read, then adopts the natural form: direct statement, contrast, observation, open question, or question with an answer. No form is preferred, and batch writing includes a side-by-side audit for repeated syntax and question patterns. Research Overview then gives the compact method-and-result map without previewing detailed statistics. The internal `method_map` ranks analyses as `core`, `supporting`, or `routine` and records data, processing, statistics, useful outputs, and research-material locators.
+
+Core and innovative analyses receive the most detail; software command chains, noncritical acquisition or tracking settings, standard preprocessing, routine database enrichment, and secondary sensitivity checks are compressed. Methods foreground the analytical logic, key steps, and parameters that materially affect interpretation. Ordinary unreported parameters are omitted silently. A missing detail is stated only when it directly changes interpretation of a principal conclusion or the user explicitly requests a method-completeness audit. Outputs are described only when they define a later variable, matrix, score, or component.
+
+Relative section length and subsection count are determined by the paper. Results retain only the statistics needed to establish the main conclusions instead of listing every p value, odds ratio, coefficient, or enrichment term. Result Interpretation explains meaning, relationships among findings, and only the boundaries that materially affect interpretation; it does not restate the result paragraphs. Correlations, spatial correspondence, PLS weights, and gene-set enrichment are not written as direct causal or mechanistic evidence. Closing states what the study adds and what neuroimaging researchers can take from its design, without replaying the full workflow or every result. When revising an existing draft, the workflow preserves sections outside the requested scope and prefers deletion or local adjustment over wholesale rewriting.
+
+Total length and figure count are evidence-driven. Section shares are reported as descriptive statistics only and never trigger validation decisions by themselves. Figures prioritize core findings; dense composite figures are cropped, split, or reduced to selected panels for mobile reading while preserving source provenance. Public HTML shows only concise figure captions; provenance and licensing remain mandatory internal metadata. HTML references the original device-system font stack without distributing font files, while generated covers continue to use the bundled OFL-licensed Noto Sans SC. The digest appears once in the grey card above the Research Overview. Existing `schema_version: 1` through `schema_version: 7` articles remain valid for reading, rendering, and the established draft workflow, but new writing must use version 8. No migration rewrites historical JSON, HTML, SQLite records, or WeChat drafts.
 
 ## Python environment
 

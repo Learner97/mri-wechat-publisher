@@ -1,18 +1,20 @@
 {
-  "schema_version": 1,
+  "schema_version": 8,
   "article_id": "phase1-test-001",
   "publication_mode": "draft_only",
   "title": "测试期刊 | MRI排版",
   "author": "脑影像工坊",
-  "digest": "用于验证五段式文章结构、微信公众号排版和草稿保存流程，不对应任何真实研究结论。",
+  "digest": "一份不含真实研究数据的离线夹具，用于检查公众号文章的结构、排版和草稿安全门控。",
   "content_source_url": "",
   "source": {
     "title": "第一阶段内部测试夹具",
     "source_id": "PHASE1-TEST-001",
-    "doi": "",
+    "doi": "10.0000/phase1-test",
     "url": "",
-    "journal": "",
+    "journal": "测试期刊",
     "published_at": "2026-08-03",
+    "authors": ["内部测试夹具"],
+    "version_status": "OTHER_VERIFIED",
     "evidence_level": "TEST_FIXTURE",
     "fulltext_verified": false,
     "source_manifest": "internal:test-fixture"
@@ -24,33 +26,37 @@
   },
   "sections": [
     {
-      "id": "abstract",
-      "heading": "摘要解读",
+      "id": "overview",
+      "heading": "研究速览",
       "blocks": [
         {
           "type": "callout",
-          "text": "这是一篇系统测试草稿，只用于确认内容能否安全进入公众号草稿箱。"
+          "text": "测试问题是结构化文章能否依次通过字段校验、微信排版和草稿安全门控。对象是一份内部文章JSON，检查范围包括六个正文部分、来源与图片字段、HTML输出和草稿模式。"
         },
         {
           "type": "paragraph",
-          "text": "第一阶段验证的核心不是科学结论，而是结构化内容、排版、质检和草稿保存之间能否形成稳定闭环。"
+          "text": "通过结果表示这些离线环节可以衔接，但不对应真实论文的科学结论。"
         }
       ]
     },
     {
-      "id": "design",
-      "heading": "研究设计与数据",
+      "id": "introduction",
+      "heading": "引言",
       "blocks": [
         {
           "type": "paragraph",
-          "text": "测试输入由五个固定章节、一个内部来源标识和可追溯的证据记录组成，不包含真实受试者数据。"
+          "text": "该离线夹具用于检查新版六段式结构能否通过校验、排版和草稿安全门控。它不包含真实受试者数据，也不承担科学结论验证。"
         }
       ]
     },
     {
-      "id": "method",
-      "heading": "核心方法解析",
+      "id": "methods",
+      "heading": "方法",
       "blocks": [
+        {
+          "type": "subheading",
+          "text": "结构校验与HTML转换"
+        },
         {
           "type": "paragraph",
           "text": "转换器读取统一 JSON，先检查章节、标题和发布模式，再输出只包含保守内联样式的微信公众号 HTML。"
@@ -68,8 +74,12 @@
     },
     {
       "id": "results",
-      "heading": "关键结果与证据链",
+      "heading": "结果",
       "blocks": [
+        {
+          "type": "subheading",
+          "text": "六段式结构通过离线检查"
+        },
         {
           "type": "paragraph",
           "text": "如果测试成功，后台应出现同名草稿；这只能证明 B 级草稿闭环通过，不能证明自动发表或群发能力。"
@@ -77,12 +87,22 @@
       ]
     },
     {
-      "id": "implications",
-      "heading": "方法启示与总结",
+      "id": "result_interpretation",
+      "heading": "结果解读",
       "blocks": [
         {
           "type": "paragraph",
-          "text": "后续真实文章将复用同一数据契约，并在写入草稿前增加全文证据核查、图片许可检查和用户确认。"
+          "text": "该测试只检验文章结构、排版和安全门控，不能用于判断真实论文解读的科学准确性。真实文章仍需单独完成全文核验和图片许可检查。"
+        }
+      ]
+    },
+    {
+      "id": "closing",
+      "heading": "结语",
+      "blocks": [
+        {
+          "type": "paragraph",
+          "text": "测试使用统一JSON连接结构校验、HTML排版和草稿安全门控。通过结果表示六个正文部分能够进入本地预览流程，不代表自动发表能力。"
         }
       ]
     }
@@ -102,6 +122,35 @@
       "claim_id": "C1",
       "claim": "该内容仅为流程测试，不对应真实研究结论。",
       "source_locator": "PHASE1-TEST-001/fixture-definition",
+      "claim_type": "direct_result",
+      "status": "verified"
+    }
+  ],
+  "method_map": [
+    {
+      "method_id": "M1",
+      "name": "结构校验与HTML转换",
+      "section_heading": "结构校验与HTML转换",
+      "importance": "routine",
+      "purpose": "验证统一JSON能否经过结构校验并转换为微信兼容HTML。",
+      "data": {
+        "description": "输入为一份内部测试文章JSON。",
+        "source": "PHASE1-TEST-001内部夹具",
+        "analysis_unit": "单篇结构化文章"
+      },
+      "processing_steps": [
+        "校验六个章节、标题、来源、证据和草稿模式字段。",
+        "将通过校验的内容转换为只含保守内联样式的HTML。"
+      ],
+      "statistics": [
+        "执行确定性字段和安全规则检查，不进行统计推断。"
+      ],
+      "outputs": [
+        "结构校验状态和微信公众号兼容HTML。"
+      ],
+      "source_locators": [
+        "PHASE1-TEST-001/fixture-definition"
+      ],
       "status": "verified"
     }
   ],

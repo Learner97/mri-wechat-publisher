@@ -1,4 +1,4 @@
 interface:
   display_name: "MRI 文献与方法写作"
-  short_description: "依据已核验全文和补充材料撰写MRI文献方法融合文章"
-  default_prompt: "使用 $write-mri-paper-method-article 根据已核验全文撰写 MRI 文献与方法融合文章。"
+  short_description: "减少重复和参数堆积，写作易读的MRI研究解读"
+  default_prompt: "使用 $write-mri-paper-method-article 整合已核验研究材料：先找到每篇论文最有辨识度的阅读入口，再决定灰框用陈述、反差、观察、开放问题或自问自答，问句不是默认；批量写作时横向检查句式同构。研究速览交代怎么做和发现什么，正文压缩非关键参数与次要统计量并控制因果措辞；结语不强制写方法启示。"

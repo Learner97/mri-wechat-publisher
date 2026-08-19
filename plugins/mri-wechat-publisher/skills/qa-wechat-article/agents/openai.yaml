@@ -1,4 +1,4 @@
 interface:
   display_name: "MRI 微信文章质检"
-  short_description: "核验全文证据、结构、引用、图片与公众号草稿安全边界"
-  default_prompt: "使用 $qa-wechat-article 对文章的全文证据、结构、引用、图片与草稿安全边界进行质检。"
+  short_description: "核验重复、参数统计密度、因果措辞和移动端图片"
+  default_prompt: "使用 $qa-wechat-article 核验文章与研究材料是否一致，检查灰框是否采用最适合该论文的入口而非默认问句，并在批量文章间比较问号位置、开头语法和两句关系；同时核验灰框与研究速览分工、方法参数密度、结果统计量、结果解读增量、结语自然度、因果措辞、移动端图片和草稿安全。"

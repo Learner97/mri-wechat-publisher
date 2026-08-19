@@ -1,4 +1,4 @@
 interface:
   display_name: "MRI 微信工作流"
-  short_description: "编排全文核验、MRI文献写作、质检排版与安全草稿保存"
-  default_prompt: "使用 $run-mri-wechat-workflow 按来源门控执行 MRI 微信公众号完整工作流。"
+  short_description: "编排材料整合、分级方法图谱、写作质检与草稿保存"
+  default_prompt: "使用 $run-mri-wechat-workflow 按来源门控执行 MRI 微信公众号完整工作流；写作前整合全部研究材料并按重要性建立方法图谱，新稿使用研究速览结构，压缩非关键参数和次要统计量，控制因果措辞并优先选择移动端可读的核心结果图。"

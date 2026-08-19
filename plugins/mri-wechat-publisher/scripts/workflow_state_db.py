@@ -995,6 +995,119 @@ def source_status(
     }
 
 
+def refresh_source_gate(
+    connection: sqlite3.Connection, cycle_id: str, access_path: Path
+) -> dict[str, Any]:
+    """Refresh a selected cycle's metadata-only access result without fetching content."""
+    payload = load_json(access_path)
+    access_payload = payload.get("fulltext_access") if isinstance(payload, dict) else None
+    if not isinstance(access_payload, dict):
+        access_payload = payload
+    if not isinstance(access_payload, dict):
+        raise ValueError("全文可用性 JSON 必须是对象或包含 fulltext_access 的对象。")
+    access = candidate_fulltext_access(
+        {"fulltext_access": access_payload}, required=True
+    )
+    assert access is not None
+    gate = ensure_source_gate(connection, cycle_id)
+    if gate["gate_status"] in {"SOURCE_FILES_READY", "SOURCE_VALIDATED"}:
+        raise ValueError("来源文件已经登记或验证，不能覆盖现有来源门控。")
+    access_status = access["status"]
+    gate_status = (
+        "PUBLIC_SOURCE_PENDING_FETCH"
+        if access_status in {"PUBLIC_FULLTEXT_CONFIRMED", "PUBLIC_HTML_CONFIRMED"}
+        else "AWAITING_USER_UPLOAD"
+    )
+    timestamp = now_iso()
+    with immediate_transaction(connection):
+        cycle = connection.execute(
+            "SELECT * FROM cycles WHERE cycle_id=?", (cycle_id,)
+        ).fetchone()
+        if not cycle or cycle["selected_paper_id"] is None:
+            raise ValueError("只有已选择论文的周期才能刷新来源门控。")
+        candidate = connection.execute(
+            """
+            SELECT * FROM candidates
+            WHERE cycle_id=? AND paper_id=?
+            ORDER BY choice LIMIT 1
+            """,
+            (cycle_id, cycle["selected_paper_id"]),
+        ).fetchone()
+        if not candidate:
+            raise ValueError("已选周期缺少候选记录。")
+        source_payload = json.loads(candidate["source_json"])
+        source_payload["fulltext_access"] = access
+        connection.execute(
+            "UPDATE candidates SET source_json=? WHERE cycle_id=? AND paper_id=?",
+            (json.dumps(source_payload, ensure_ascii=False), cycle_id, cycle["selected_paper_id"]),
+        )
+        # Selection-queue compatibility output reads the source metadata from
+        # the original recommendation candidate (batch_cycle_id/source_choice),
+        # while the active processing cycle has its own candidate copy. Keep
+        # both records synchronized so a refreshed public-access result cannot
+        # be mistaken for a pending user upload by downstream status readers.
+        queue_row = connection.execute(
+            """
+            SELECT batch_cycle_id, source_choice
+            FROM selection_queue
+            WHERE processing_cycle_id=? AND status='ACTIVE'
+            ORDER BY queue_position LIMIT 1
+            """,
+            (cycle_id,),
+        ).fetchone()
+        if queue_row:
+            batch_candidate = connection.execute(
+                """
+                SELECT * FROM candidates
+                WHERE cycle_id=? AND choice=? AND paper_id=?
+                LIMIT 1
+                """,
+                (
+                    queue_row["batch_cycle_id"],
+                    queue_row["source_choice"],
+                    cycle["selected_paper_id"],
+                ),
+            ).fetchone()
+            if batch_candidate:
+                batch_source_payload = json.loads(batch_candidate["source_json"])
+                batch_source_payload["fulltext_access"] = access
+                connection.execute(
+                    """
+                    UPDATE candidates SET source_json=?
+                    WHERE cycle_id=? AND choice=? AND paper_id=?
+                    """,
+                    (
+                        json.dumps(batch_source_payload, ensure_ascii=False),
+                        queue_row["batch_cycle_id"],
+                        queue_row["source_choice"],
+                        cycle["selected_paper_id"],
+                    ),
+                )
+        connection.execute(
+            """
+            UPDATE source_gates
+            SET access_status=?, gate_status=?, access_check_json=?,
+                checked_at=?, updated_at=?
+            WHERE cycle_id=?
+            """,
+            (
+                access_status,
+                gate_status,
+                json.dumps(access, ensure_ascii=False),
+                access.get("checked_at"),
+                timestamp,
+                cycle_id,
+            ),
+        )
+    export_compatibility(connection)
+    refreshed = connection.execute(
+        "SELECT * FROM source_gates WHERE cycle_id=?", (cycle_id,)
+    ).fetchone()
+    result = source_gate_dict(refreshed)
+    assert result is not None
+    return result
+
+
 def file_sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -2837,6 +2950,10 @@ def build_parser() -> argparse.ArgumentParser:
     source = subparsers.add_parser("source-status")
     source.add_argument("--cycle-id")
 
+    refresh_source = subparsers.add_parser("refresh-source-gate")
+    refresh_source.add_argument("--cycle-id", required=True)
+    refresh_source.add_argument("--access-json", type=Path, required=True)
+
     register_source = subparsers.add_parser("register-source-manifest")
     register_source.add_argument("--cycle-id", required=True)
     register_source.add_argument("--manifest", type=Path, required=True)
@@ -2966,6 +3083,8 @@ def main() -> int:
         elif args.command == "source-status":
             result = source_status(connection, args.cycle_id)
             export_compatibility(connection)
+        elif args.command == "refresh-source-gate":
+            result = refresh_source_gate(connection, args.cycle_id, args.access_json.resolve())
         elif args.command == "register-source-manifest":
             result = register_source_manifest(
                 connection, args.cycle_id, args.manifest.resolve()

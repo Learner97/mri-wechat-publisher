@@ -28,6 +28,10 @@ FORBIDDEN_HTML_PATTERNS = [
         r"position\s*:\s*fixed",
     )
 ]
+SYSTEM_FONT_STACK = (
+    "-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',"
+    "'Hiragino Sans GB','Microsoft YaHei',sans-serif"
+)
 
 
 def inline_text(value: str) -> str:
@@ -83,8 +87,6 @@ def render_block(
             'style="display:block;width:100%;max-width:677px;height:auto;margin:0 auto;" />'
             '<p style="margin:8px 0 0;line-height:1.55;font-size:12px;color:#777;text-align:center;">'
             f'{inline_text(figure["caption"])}</p>'
-            '<p style="margin:3px 0 0;line-height:1.45;font-size:11px;color:#999;text-align:center;">'
-            f'来源：{inline_text(figure["source"])}；{inline_text(figure["license_note"])}</p>'
             '</section>'
         )
     raise ValueError(f"Unsupported block type: {block_type}")
@@ -96,15 +98,16 @@ def render_article(
     figures = {figure["asset_id"]: figure for figure in article.get("figures", [])}
     parts = [
         '<section data-plugin="mri-wechat-publisher" '
+        f'data-schema-version="{int(article.get("schema_version", 1))}" '
         'style="box-sizing:border-box;max-width:677px;margin:0 auto;padding:8px 4px;'
-        'font-family:-apple-system,BlinkMacSystemFont,Segoe UI,PingFang SC,Hiragino Sans GB,'
-        'Microsoft YaHei,sans-serif;">',
+        f'font-family:{SYSTEM_FONT_STACK};">',
         '<h1 style="margin:8px 0 14px;font-size:24px;line-height:1.45;color:#173f5f;'
         'font-weight:700;text-align:left;overflow-wrap:anywhere;word-break:break-word;">'
         f'{inline_text(article["title"])}</h1>',
         '<p style="margin:0 0 16px;font-size:13px;line-height:1.6;color:#777;">'
         f'作者：{inline_text(article["author"])}</p>',
-        '<section style="margin:0 0 24px;padding:14px 16px;background:#f7f8fa;border-radius:6px;">'
+        '<section data-role="digest" style="margin:0 0 24px;padding:14px 16px;'
+        'background:#f7f8fa;border-radius:6px;">'
         '<p style="margin:0;font-size:14px;line-height:1.75;color:#555;">'
         f'{inline_text(article["digest"])}</p></section>',
     ]

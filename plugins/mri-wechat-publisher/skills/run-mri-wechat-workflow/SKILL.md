@@ -114,7 +114,7 @@ python "<plugin-root>\scripts\workflow_state_db.py" `
 ```
 
 7. If evidence is insufficient, use `--decision BLOCKED`; do not draft a full article from the abstract.
-8. Invoke `write-mri-paper-method-article`, then `qa-wechat-article`, then `format-wechat-article`.
+8. Invoke `write-mri-paper-method-article` to create a new `schema_version: 8` article in the required order 研究速览、引言、方法、结果、结果解读、结语. Make the grey digest answer why the paper is worth opening while 研究速览 gives the compact method-and-result map; keep the two non-redundant. Select the digest form only after identifying the paper-specific entry point; questions, question-and-answer, contrasts, observations, and direct results are equally optional. When preparing multiple articles, compare all digests side by side and revise repeated interrogative or declarative skeletons before rendering. Compress non-critical technical parameters, retain only decisive statistics, and avoid causal wording for correlation, spatial association, or enrichment results. Do not create a separate 方法启示 section, and do not require method commentary in 结语; include a justified transferable design idea only when it adds paper-specific information. Require a verified, importance-ranked `method_map` whose analyses state data, processing, statistics, optional useful outputs, and research-material locators; require a mobile display strategy for every figure, render `method-map.md`, then invoke `qa-wechat-article` and `format-wechat-article`.
 9. Call `set-artifacts` only after both `SOURCE_VALIDATED` and `QA_PASSED`.
 10. Present the draft and obtain explicit approval before `save-wechat-draft`.
 11. Persist the verified draft receipt with `<plugin-root>/scripts/workflow_state_db.py --db <data-dir>/workflow.db record-draft`; report `next_queued` without fetching its full text early.
@@ -125,7 +125,9 @@ python "<plugin-root>\scripts\workflow_state_db.py" `
 - Supplements are required only when a central method or result depends on them; otherwise record their absence as a warning and avoid unsupported claims.
 - Bind every formal `article.json` to the registered source manifest.
 - Support every quantitative result, parameter, anatomical claim, figure, and limitation with a full-text or supplement locator.
-- Keep author claims, direct evidence, and editorial inference distinct.
+- For every mapped analysis, record source-supported data, processing, statistics, importance, and useful outputs in `method_map`. Do not infer missing software versions, parameters, dimensions, thresholds, algorithms, or sample counts. Omit ordinary missing parameters; record only missing information that directly changes interpretation of a principal conclusion or is requested in a method-completeness audit.
+- Integrate main text, supplements, appendices, proof, and verified versions before drafting. Do not expose retrieval, verification, or material-comparison language in the public article unless a substantive version difference changes interpretation.
+- Classify direct results, author interpretations, editorial explanations, and limited editorial extensions in the internal evidence map; do not expose those QA labels as visible article structure.
 - Never turn correlation into causation or infer undisclosed parameters.
 
 ## Failure behavior

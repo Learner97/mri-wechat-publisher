@@ -1,0 +1,11 @@
+{
+  "font_family": "Noto Sans SC",
+  "file": "NotoSansSC-VF.ttf",
+  "sha256": "763146584CF0710223441356B4395E279021B0806C196614377A7A0174AE074A",
+  "license": "SIL Open Font License 1.1",
+  "license_file": "OFL.txt",
+  "upstream_project": "Noto CJK",
+  "upstream_url": "https://github.com/notofonts/noto-cjk",
+  "license_url": "https://github.com/notofonts/noto-cjk/blob/main/Sans/LICENSE",
+  "usage": "Plugin-generated cover assets only; HTML previews call device system fonts without embedding or redistributing font files, and source-paper raster figures remain unchanged licensed works."
+}

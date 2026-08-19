@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://local.example/mri-wechat-publisher/article.schema.json",
-  "title": "MRI WeChat hybrid article",
+  "title": "MRI WeChat source-grounded article",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -18,7 +18,7 @@
     "evidence_map"
   ],
   "properties": {
-    "schema_version": {"const": 1},
+    "schema_version": {"enum": [1, 2, 3, 4, 5, 6, 7, 8]},
     "article_id": {"type": "string", "minLength": 1, "maxLength": 100},
     "publication_mode": {"const": "draft_only"},
     "title": {"type": "string", "minLength": 5, "maxLength": 64, "pattern": "^[^|\\s](?:[^|\\r\\n]*[^|\\s])? \\| [^|\\s](?:[^|\\r\\n]{0,18}[^|\\s])?$"},
@@ -39,9 +39,24 @@
         "title": {"type": "string", "minLength": 1},
         "source_id": {"type": "string", "minLength": 1},
         "doi": {"type": "string"},
+        "pmid": {"type": "string"},
         "url": {"type": "string"},
         "journal": {"type": "string"},
         "published_at": {"type": "string"},
+        "authors": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "version_status": {
+          "enum": [
+            "VERSION_OF_RECORD",
+            "PROOF",
+            "ACCEPTED_MANUSCRIPT",
+            "PREPRINT",
+            "OTHER_VERIFIED"
+          ]
+        },
         "evidence_level": {"enum": ["FULLTEXT", "TEST_FIXTURE"]},
         "fulltext_verified": {"type": "boolean"},
         "source_manifest": {"type": "string", "minLength": 1}
@@ -60,7 +75,7 @@
     "sections": {
       "type": "array",
       "minItems": 5,
-      "maxItems": 5,
+      "maxItems": 7,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -94,11 +109,33 @@
         "required": ["asset_id", "path", "alt", "caption", "source", "license_note"],
         "properties": {
           "asset_id": {"type": "string", "minLength": 1},
+          "figure_id": {"type": "string", "minLength": 1},
           "path": {"type": "string", "minLength": 1},
           "alt": {"type": "string", "minLength": 1},
           "caption": {"type": "string", "minLength": 1},
           "source": {"type": "string", "minLength": 1},
-          "license_note": {"type": "string", "minLength": 1}
+          "license_note": {"type": "string", "minLength": 1},
+          "mobile_display": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["strategy"],
+            "properties": {
+              "strategy": {"enum": ["native", "cropped", "split_panel", "selected_panels"]},
+              "source_figure_id": {"type": "string", "minLength": 1},
+              "panel_label": {"type": "string", "minLength": 1}
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "strategy": {"enum": ["cropped", "split_panel", "selected_panels"]}
+                  },
+                  "required": ["strategy"]
+                },
+                "then": {"required": ["source_figure_id"]}
+              }
+            ]
+          }
         }
       }
     },
@@ -129,7 +166,85 @@
           "claim_id": {"type": "string", "minLength": 1},
           "claim": {"type": "string", "minLength": 1},
           "source_locator": {"type": "string", "minLength": 1},
+          "claim_type": {
+            "enum": [
+              "direct_result",
+              "author_interpretation",
+              "editorial_explanation",
+              "editorial_extension"
+            ]
+          },
           "status": {"enum": ["verified", "blocked"]}
+        }
+      }
+    },
+    "method_map": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "method_id",
+          "name",
+          "section_heading",
+          "purpose",
+          "data",
+          "processing_steps",
+          "statistics",
+          "source_locators",
+          "status"
+        ],
+        "properties": {
+          "method_id": {"type": "string", "minLength": 1},
+          "name": {"type": "string", "minLength": 1},
+          "section_heading": {"type": "string", "minLength": 1},
+          "purpose": {"type": "string", "minLength": 1},
+          "importance": {"enum": ["core", "supporting", "routine"]},
+          "data": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["description"],
+            "properties": {
+              "description": {"type": "string", "minLength": 1},
+              "sample": {"type": "string"},
+              "source": {"type": "string"},
+              "modality": {"type": "string"},
+              "groups": {"type": "string"},
+              "analysis_unit": {"type": "string"},
+              "dimensions": {"type": "string"}
+            }
+          },
+          "processing_steps": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "statistics": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "outputs": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "source_locators": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "unreported_details": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          },
+          "critical_missing_details": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "status": {"const": "verified"}
         }
       }
     },
@@ -141,5 +256,363 @@
         "only_fans_can_comment": {"enum": [0, 1]}
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"schema_version": {"const": 1}},
+        "required": ["schema_version"]
+      },
+      "then": {
+        "properties": {
+          "sections": {
+            "minItems": 5,
+            "maxItems": 5,
+            "prefixItems": [
+              {"properties": {"id": {"const": "abstract"}, "heading": {"const": "摘要解读"}}},
+              {"properties": {"id": {"const": "design"}, "heading": {"const": "研究设计与数据"}}},
+              {"properties": {"id": {"const": "method"}, "heading": {"const": "核心方法解析"}}},
+              {"properties": {"id": {"const": "results"}, "heading": {"const": "关键结果与证据链"}}},
+              {"properties": {"id": {"const": "implications"}, "heading": {"const": "方法启示与总结"}}}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"schema_version": {"const": 2}},
+        "required": ["schema_version"]
+      },
+      "then": {
+        "properties": {
+          "source": {
+            "required": ["journal", "published_at", "authors", "version_status"],
+            "properties": {
+              "doi": {"type": "string", "minLength": 1},
+              "pmid": {"type": "string", "minLength": 1},
+              "journal": {"type": "string", "minLength": 1},
+              "published_at": {"type": "string", "minLength": 1}
+            },
+            "anyOf": [
+              {"required": ["doi"]},
+              {"required": ["pmid"]}
+            ]
+          },
+          "sections": {
+            "minItems": 5,
+            "maxItems": 5,
+            "prefixItems": [
+              {"properties": {"id": {"const": "abstract"}, "heading": {"const": "摘要"}}},
+              {"properties": {"id": {"const": "introduction"}, "heading": {"const": "引言"}}},
+              {"properties": {"id": {"const": "methods"}, "heading": {"const": "方法"}}},
+              {"properties": {"id": {"const": "results"}, "heading": {"const": "结果"}}},
+              {"properties": {"id": {"const": "discussion"}, "heading": {"const": "讨论与总结"}}}
+            ]
+          },
+          "figures": {
+            "items": {"required": ["figure_id"]}
+          },
+          "evidence_map": {
+            "items": {"required": ["claim_type"]}
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"schema_version": {"const": 3}},
+        "required": ["schema_version"]
+      },
+      "then": {
+        "properties": {
+          "source": {
+            "required": ["journal", "published_at", "authors", "version_status"],
+            "properties": {
+              "doi": {"type": "string", "minLength": 1},
+              "pmid": {"type": "string", "minLength": 1},
+              "journal": {"type": "string", "minLength": 1},
+              "published_at": {"type": "string", "minLength": 1}
+            },
+            "anyOf": [
+              {"required": ["doi"]},
+              {"required": ["pmid"]}
+            ]
+          },
+          "sections": {
+            "minItems": 6,
+            "maxItems": 6,
+            "prefixItems": [
+              {"properties": {"id": {"const": "abstract"}, "heading": {"const": "摘要"}}},
+              {"properties": {"id": {"const": "introduction"}, "heading": {"const": "引言"}}},
+              {"properties": {"id": {"const": "methods"}, "heading": {"const": "方法"}}},
+              {"properties": {"id": {"const": "results"}, "heading": {"const": "结果"}}},
+              {"properties": {"id": {"const": "discussion"}, "heading": {"const": "讨论"}}},
+              {"properties": {"id": {"const": "summary"}, "heading": {"const": "总结"}}}
+            ]
+          },
+          "figures": {
+            "items": {"required": ["figure_id"]}
+          },
+          "evidence_map": {
+            "items": {"required": ["claim_type"]}
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"schema_version": {"const": 4}},
+        "required": ["schema_version"]
+      },
+      "then": {
+        "required": ["method_map"],
+        "properties": {
+          "method_map": {
+            "items": {"required": ["outputs"]}
+          },
+          "source": {
+            "required": ["journal", "published_at", "authors", "version_status"],
+            "properties": {
+              "doi": {"type": "string", "minLength": 1},
+              "pmid": {"type": "string", "minLength": 1},
+              "journal": {"type": "string", "minLength": 1},
+              "published_at": {"type": "string", "minLength": 1}
+            },
+            "anyOf": [
+              {"required": ["doi"]},
+              {"required": ["pmid"]}
+            ]
+          },
+          "sections": {
+            "minItems": 6,
+            "maxItems": 6,
+            "prefixItems": [
+              {"properties": {"id": {"const": "abstract"}, "heading": {"const": "摘要"}}},
+              {"properties": {"id": {"const": "introduction"}, "heading": {"const": "引言"}}},
+              {"properties": {"id": {"const": "methods"}, "heading": {"const": "方法"}}},
+              {"properties": {"id": {"const": "results"}, "heading": {"const": "结果"}}},
+              {"properties": {"id": {"const": "discussion"}, "heading": {"const": "讨论"}}},
+              {"properties": {"id": {"const": "summary"}, "heading": {"const": "总结"}}}
+            ]
+          },
+          "figures": {
+            "items": {"required": ["figure_id"]}
+          },
+          "evidence_map": {
+            "items": {"required": ["claim_type"]}
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"schema_version": {"const": 5}},
+        "required": ["schema_version"]
+      },
+      "then": {
+        "required": ["method_map"],
+        "properties": {
+          "source": {
+            "required": ["journal", "published_at", "authors", "version_status"],
+            "properties": {
+              "doi": {"type": "string", "minLength": 1},
+              "pmid": {"type": "string", "minLength": 1},
+              "journal": {"type": "string", "minLength": 1},
+              "published_at": {"type": "string", "minLength": 1}
+            },
+            "anyOf": [
+              {"required": ["doi"]},
+              {"required": ["pmid"]}
+            ]
+          },
+          "sections": {
+            "minItems": 6,
+            "maxItems": 6,
+            "prefixItems": [
+              {"properties": {"id": {"const": "abstract"}, "heading": {"const": "摘要"}}},
+              {"properties": {"id": {"const": "introduction"}, "heading": {"const": "引言"}}},
+              {"properties": {"id": {"const": "methods"}, "heading": {"const": "方法"}}},
+              {"properties": {"id": {"const": "results"}, "heading": {"const": "结果"}}},
+              {"properties": {"id": {"const": "discussion"}, "heading": {"const": "讨论"}}},
+              {"properties": {"id": {"const": "summary"}, "heading": {"const": "总结"}}}
+            ]
+          },
+          "figures": {
+            "items": {"required": ["figure_id"]}
+          },
+          "evidence_map": {
+            "items": {"required": ["claim_type"]}
+          },
+          "method_map": {
+            "items": {
+              "required": ["importance"],
+              "not": {"required": ["unreported_details"]}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"schema_version": {"const": 6}},
+        "required": ["schema_version"]
+      },
+      "then": {
+        "required": ["method_map"],
+        "properties": {
+          "source": {
+            "required": ["journal", "published_at", "authors", "version_status"],
+            "properties": {
+              "doi": {"type": "string", "minLength": 1},
+              "pmid": {"type": "string", "minLength": 1},
+              "journal": {"type": "string", "minLength": 1},
+              "published_at": {"type": "string", "minLength": 1}
+            },
+            "anyOf": [
+              {"required": ["doi"]},
+              {"required": ["pmid"]}
+            ]
+          },
+          "sections": {
+            "anyOf": [
+              {
+                "minItems": 6,
+                "maxItems": 6,
+                "prefixItems": [
+                  {"properties": {"id": {"const": "abstract"}, "heading": {"const": "摘要"}}},
+                  {"properties": {"id": {"const": "introduction"}, "heading": {"const": "引言"}}},
+                  {"properties": {"id": {"const": "methods"}, "heading": {"const": "方法"}}},
+                  {"properties": {"id": {"const": "results"}, "heading": {"const": "结果"}}},
+                  {"properties": {"id": {"const": "result_interpretation"}, "heading": {"const": "结果解读"}}},
+                  {"properties": {"id": {"const": "closing"}, "heading": {"const": "结语"}}}
+                ]
+              },
+              {
+                "minItems": 7,
+                "maxItems": 7,
+                "prefixItems": [
+                  {"properties": {"id": {"const": "abstract"}, "heading": {"const": "摘要"}}},
+                  {"properties": {"id": {"const": "introduction"}, "heading": {"const": "引言"}}},
+                  {"properties": {"id": {"const": "methods"}, "heading": {"const": "方法"}}},
+                  {"properties": {"id": {"const": "results"}, "heading": {"const": "结果"}}},
+                  {"properties": {"id": {"const": "result_interpretation"}, "heading": {"const": "结果解读"}}},
+                  {"properties": {"id": {"const": "method_insights"}, "heading": {"const": "方法启示"}}},
+                  {"properties": {"id": {"const": "closing"}, "heading": {"const": "结语"}}}
+                ]
+              }
+            ]
+          },
+          "figures": {
+            "items": {"required": ["figure_id"]}
+          },
+          "evidence_map": {
+            "items": {"required": ["claim_type"]}
+          },
+          "method_map": {
+            "items": {
+              "required": ["importance"],
+              "not": {"required": ["unreported_details"]}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"schema_version": {"const": 7}},
+        "required": ["schema_version"]
+      },
+      "then": {
+        "required": ["method_map"],
+        "properties": {
+          "source": {
+            "required": ["journal", "published_at", "authors", "version_status"],
+            "properties": {
+              "doi": {"type": "string", "minLength": 1},
+              "pmid": {"type": "string", "minLength": 1},
+              "journal": {"type": "string", "minLength": 1},
+              "published_at": {"type": "string", "minLength": 1}
+            },
+            "anyOf": [
+              {"required": ["doi"]},
+              {"required": ["pmid"]}
+            ]
+          },
+          "sections": {
+            "minItems": 6,
+            "maxItems": 6,
+            "prefixItems": [
+              {"properties": {"id": {"const": "abstract"}, "heading": {"const": "摘要"}}},
+              {"properties": {"id": {"const": "introduction"}, "heading": {"const": "引言"}}},
+              {"properties": {"id": {"const": "methods"}, "heading": {"const": "方法"}}},
+              {"properties": {"id": {"const": "results"}, "heading": {"const": "结果"}}},
+              {"properties": {"id": {"const": "result_interpretation"}, "heading": {"const": "结果解读"}}},
+              {"properties": {"id": {"const": "closing"}, "heading": {"const": "结语"}}}
+            ]
+          },
+          "figures": {
+            "items": {"required": ["figure_id"]}
+          },
+          "evidence_map": {
+            "items": {"required": ["claim_type"]}
+          },
+          "method_map": {
+            "items": {
+              "required": ["importance"],
+              "not": {"required": ["unreported_details"]}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"schema_version": {"const": 8}},
+        "required": ["schema_version"]
+      },
+      "then": {
+        "required": ["method_map"],
+        "properties": {
+          "source": {
+            "required": ["journal", "published_at", "authors", "version_status"],
+            "properties": {
+              "doi": {"type": "string", "minLength": 1},
+              "pmid": {"type": "string", "minLength": 1},
+              "journal": {"type": "string", "minLength": 1},
+              "published_at": {"type": "string", "minLength": 1}
+            },
+            "anyOf": [
+              {"required": ["doi"]},
+              {"required": ["pmid"]}
+            ]
+          },
+          "sections": {
+            "minItems": 6,
+            "maxItems": 6,
+            "prefixItems": [
+              {"properties": {"id": {"const": "overview"}, "heading": {"const": "研究速览"}}},
+              {"properties": {"id": {"const": "introduction"}, "heading": {"const": "引言"}}},
+              {"properties": {"id": {"const": "methods"}, "heading": {"const": "方法"}}},
+              {"properties": {"id": {"const": "results"}, "heading": {"const": "结果"}}},
+              {"properties": {"id": {"const": "result_interpretation"}, "heading": {"const": "结果解读"}}},
+              {"properties": {"id": {"const": "closing"}, "heading": {"const": "结语"}}}
+            ]
+          },
+          "figures": {
+            "items": {"required": ["figure_id", "mobile_display"]}
+          },
+          "evidence_map": {
+            "items": {"required": ["claim_type"]}
+          },
+          "method_map": {
+            "items": {
+              "required": ["importance"],
+              "not": {"required": ["unreported_details"]}
+            }
+          }
+        }
+      }
+    }
+  ]
 }
