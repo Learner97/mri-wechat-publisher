@@ -7,11 +7,13 @@
 
 插件只支持保存草稿，不包含自动发表、群发、删除或覆盖线上内容的功能。
 
-当前稳定版本：[v0.2.0](https://github.com/Learner97/mri-wechat-publisher/releases/tag/v0.2.0)。
+当前稳定版本：[v0.8.2](https://github.com/Learner97/mri-wechat-publisher/releases/tag/v0.8.2)。
+
+版本8重点减少批量文章中的模板痕迹：灰框根据论文内容动态选择陈述、反差、开放问题或自问自答，问句不作为默认格式；研究速览再说明研究怎样开展及主要发现。结语首先收束论文增加的认识，MRI 或研究设计启示只有在带来论文特异的新信息时才自然写入，第二段不是必选项。
 
 ## 能力
 
-- “研究速览—引言—方法—结果—结果解读—结语”中文科学文章规范；灰框提供阅读动机，研究速览交代方法与发现，结语不强制附加方法启示；
+- “研究速览—引言—方法—结果—结果解读—结语”中文科学文章规范；灰框动态提供论文特异的阅读动机，研究速览交代方法与发现，结语不强制附加方法启示；
 - 结构化文章 JSON 和微信公众号兼容 HTML；
 - 核心结果图优先，组合图可裁切或拆分；正文仅显示简洁图注，来源、许可和移动端策略保留在内部质检记录；
 - HTML调用设备系统字体，插件生成的封面使用已登记的开源字体；
@@ -194,11 +196,13 @@ python scripts\workflow_state_db.py source-status --cycle-id <cycle-id>
 
 The plugin is draft-only. It does not implement automatic publishing, mass sending, deletion, or overwriting of live content.
 
-Current stable release: [v0.2.0](https://github.com/Learner97/mri-wechat-publisher/releases/tag/v0.2.0).
+Current stable release: [v0.8.2](https://github.com/Learner97/mri-wechat-publisher/releases/tag/v0.8.2).
+
+Version 8 specifically reduces template artifacts across article batches. The grey digest selects a statement, contrast, open question, or question with an answer from the paper itself, with no default question form; Research Overview then explains how the study was conducted and what it found. Closing first states what the study adds. MRI or study-design implications appear only when they contribute paper-specific information, and a second paragraph is never mandatory.
 
 ## Capabilities
 
-- A Chinese scientific article contract with Research Overview, Introduction, Methods, Results, Result Interpretation, and Closing;
+- A Chinese scientific article contract with Research Overview, Introduction, Methods, Results, Result Interpretation, and Closing, including a paper-specific digest and an optional method-implication paragraph;
 - Structured article JSON and WeChat-compatible HTML;
 - Concise public figure captions with provenance and licensing retained in internal QA records;
 - Open-source-preferred HTML typography and an OFL-licensed bundled font for generated covers;
@@ -236,7 +240,7 @@ New articles use `schema_version: 8` with Research Overview, Introduction, Metho
 
 Core and innovative analyses receive the most detail; software command chains, noncritical acquisition or tracking settings, standard preprocessing, routine database enrichment, and secondary sensitivity checks are compressed. Methods foreground the analytical logic, key steps, and parameters that materially affect interpretation. Ordinary unreported parameters are omitted silently. A missing detail is stated only when it directly changes interpretation of a principal conclusion or the user explicitly requests a method-completeness audit. Outputs are described only when they define a later variable, matrix, score, or component.
 
-Relative section length and subsection count are determined by the paper. Results retain only the statistics needed to establish the main conclusions instead of listing every p value, odds ratio, coefficient, or enrichment term. Result Interpretation explains meaning, relationships among findings, and only the boundaries that materially affect interpretation; it does not restate the result paragraphs. Correlations, spatial correspondence, PLS weights, and gene-set enrichment are not written as direct causal or mechanistic evidence. Closing states what the study adds and what neuroimaging researchers can take from its design, without replaying the full workflow or every result. When revising an existing draft, the workflow preserves sections outside the requested scope and prefers deletion or local adjustment over wholesale rewriting.
+Relative section length and subsection count are determined by the paper. Results retain only the statistics needed to establish the main conclusions instead of listing every p value, odds ratio, coefficient, or enrichment term. Result Interpretation explains meaning, relationships among findings, and only the boundaries that materially affect interpretation; it does not restate the result paragraphs. Correlations, spatial correspondence, PLS weights, and gene-set enrichment are not written as direct causal or mechanistic evidence. Closing states what the study adds without replaying the full workflow or every result. A neuroimaging or study-design implication is included only when it adds paper-specific information and may be omitted entirely. When revising an existing draft, the workflow preserves sections outside the requested scope and prefers deletion or local adjustment over wholesale rewriting.
 
 Total length and figure count are evidence-driven. Section shares are reported as descriptive statistics only and never trigger validation decisions by themselves. Figures prioritize core findings; dense composite figures are cropped, split, or reduced to selected panels for mobile reading while preserving source provenance. Public HTML shows only concise figure captions; provenance and licensing remain mandatory internal metadata. HTML references the original device-system font stack without distributing font files, while generated covers continue to use the bundled OFL-licensed Noto Sans SC. The digest appears once in the grey card above the Research Overview. Existing `schema_version: 1` through `schema_version: 7` articles remain valid for reading, rendering, and the established draft workflow, but new writing must use version 8. No migration rewrites historical JSON, HTML, SQLite records, or WeChat drafts.
 
