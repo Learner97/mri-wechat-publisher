@@ -1,5 +1,4 @@
 interface:
   display_name: "微信公众号排版"
-  short_description: "把已质检的结构化科研文章转换成移动端友好的微信兼容 HTML"
-  default_prompt: "使用 $format-wechat-article 将结构化文章转换为微信公众号兼容 HTML。"
-
+  short_description: "以系统字体和简洁图注生成移动端微信兼容HTML"
+  default_prompt: "使用 $format-wechat-article 将含研究速览、结果解读和结语的结构化文章转换为采用设备系统字体、显示一次灰色 digest 导读卡、优先呈现移动端可读核心结果图且只显示简洁图注的微信公众号兼容 HTML。"

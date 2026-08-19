@@ -1,9 +1,22 @@
 param(
     [Parameter(Mandatory = $true)]
-    [string]$OutputPath
+    [string]$OutputPath,
+
+    [string]$FontPath
 )
 
 Add-Type -AssemblyName System.Drawing
+
+if ([string]::IsNullOrWhiteSpace($FontPath)) {
+    $FontPath = Join-Path $PSScriptRoot '..\assets\fonts\NotoSansSC-VF.ttf'
+}
+$FontPath = [System.IO.Path]::GetFullPath($FontPath)
+if (-not (Test-Path -LiteralPath $FontPath -PathType Leaf)) {
+    throw "Bundled open-source font not found: $FontPath"
+}
+$fontCollection = [System.Drawing.Text.PrivateFontCollection]::new()
+$fontCollection.AddFontFile($FontPath)
+$fontFamily = $fontCollection.Families[0]
 
 $width = 900
 $height = 383
@@ -42,9 +55,9 @@ try {
     $accentBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(245, 255, 193, 67))
     $graphics.FillRectangle($accentBrush, 344, 79, 82, 7)
 
-    $titleFont = [System.Drawing.Font]::new("Microsoft YaHei UI", 42, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
-    $subtitleFont = [System.Drawing.Font]::new("Microsoft YaHei UI", 25, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
-    $metaFont = [System.Drawing.Font]::new("Microsoft YaHei UI", 18, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
+    $titleFont = [System.Drawing.Font]::new($fontFamily, 42, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+    $subtitleFont = [System.Drawing.Font]::new($fontFamily, 25, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+    $metaFont = [System.Drawing.Font]::new($fontFamily, 18, [System.Drawing.FontStyle]::Regular, [System.Drawing.GraphicsUnit]::Pixel)
     $whiteBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::White)
     $mutedBrush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(220, 214, 239, 244))
 
@@ -66,7 +79,7 @@ try {
     $bitmap.Save($OutputPath, [System.Drawing.Imaging.ImageFormat]::Png)
 }
 finally {
-    foreach ($resource in @($titleFont, $subtitleFont, $metaFont, $whiteBrush, $mutedBrush, $accentBrush, $graphics, $bitmap)) {
+    foreach ($resource in @($titleFont, $subtitleFont, $metaFont, $whiteBrush, $mutedBrush, $accentBrush, $graphics, $bitmap, $fontFamily, $fontCollection)) {
         if ($null -ne $resource) {
             $resource.Dispose()
         }

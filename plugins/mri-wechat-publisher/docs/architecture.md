@@ -11,7 +11,7 @@ SQLite候选、去重、选择队列与状态事务
     ↓
 文件哈希、论文身份与证据充分性门控
     ↓
-证据映射与五段式写作
+证据映射、核心分析 method_map 与结果解读式写作
     ↓
 结构化 article.json
     ↓
@@ -31,8 +31,8 @@ API 草稿通道 ──失败──→ 已登录浏览器备用通道
 ## 子 Skill
 
 - `run-mri-wechat-workflow`：状态编排和人工确认门。
-- `write-mri-paper-method-article`：证据映射和五段式写作。
-- `format-wechat-article`：结构化 JSON 到微信 HTML。
+- `write-mri-paper-method-article`：证据映射、核心分析方法映射和“研究速览—引言—方法—结果—结果解读—结语”写作；压缩非关键技术参数与重复统计数字，并控制空间关联和基因富集的结论强度。
+- `format-wechat-article`：结构化 JSON 到调用设备系统字体且使用简洁公开图注的微信 HTML；不分发系统字体文件，来源与许可继续内部留档。
 - `qa-wechat-article`：结构、证据、图片和发布安全质检。
 - `save-wechat-draft`：API/浏览器双通道，仅保存草稿。
 
