@@ -25,7 +25,9 @@ jobs:
         run: python -m compileall -q scripts
       - name: Validate example article and renderer safety
         run: python scripts/self_test.py
-      - name: Test transactional workflow state
-        run: python scripts/test_workflow_state_db.py
+      - name: Check device typography and retired resources
+        run: python scripts/check_font_policy.py
+      - name: Run all offline unit and regression tests
+        run: python -m unittest discover -s scripts -p "test_*.py"
       - name: Validate example article contract
         run: python scripts/validate_article.py examples/phase1-test-article.json

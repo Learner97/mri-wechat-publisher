@@ -5,7 +5,7 @@
 - [ ] 示例 JSON 通过结构校验。
 - [ ] 缺失“研究速览、引言、方法、结果、结果解读、结语”任一必需章节时校验失败。
 - [ ] 单篇论文标题未严格使用唯一的“期刊全名或公认缩写 | 内容主标题”结构（包括出现多个 `|`）时校验失败。
-- [ ] ` | ` 后的内容主标题超过 20 个字符时校验失败；期刊标识和分隔符不计入这 20 个字符。
+- [ ] ` | ` 后的题眼偏好不超过24字符，25字符只提示精简、不阻断；完整标题的64字符硬上限仍生效，不为缩短而丢失科学对象或效应方向。
 - [ ] 标题首尾存在空白或标题包含换行时校验失败，且运行结果与 JSON Schema 一致。
 - [ ] 完整标题超过微信字段上限 64 个字符时校验失败。
 - [ ] `cover` 存在时缺少 `path`、`alt` 或 `source_note` 任一字段，或本地封面文件不存在时校验失败。
@@ -30,7 +30,7 @@
 - [ ] 引言长于方法或结果、结果占比较低或结语与研究速览篇幅差异较大时，章节统计仍正常报告，但不会仅凭比例阻断或警告。
 - [ ] 结语中的“突破性”“重大创新”“首次证明”和证据排名表述被拒绝。
 - [ ] 单段结语能够通过；“研究设计上的启发在于”“对MRI研究，较有用的是”等固定方法启示开头被拒绝。
-- [ ] HTML调用原始设备系统字体栈，不包含 `@font-face` 或远程字体；系统字体文件不会进入插件，封面继续使用登记的 Noto Sans SC。
+- [ ] HTML调用原始设备系统字体栈，不包含 `@font-face`、字体导入或远程字体；插件不携带字体文件或封面生成器，正式封面只取自当前论文原图。
 - [ ] `digest` 进入草稿元数据，并在作者行与正文“研究速览”之间以浅灰色导读卡准确渲染一次。
 - [ ] 同一小标题下没有由相同分析目标拆出的连续短段落；段落数量只作诊断，不作为固定门槛。
 - [ ] 仅负责引出下一分析的短过渡句已并入后续实质段落。
@@ -50,9 +50,12 @@
 - [ ] 每段末句若只是重复、评价、升华、列举未实施分析或泛泛展望，会被提示优先删除。
 - [ ] 对现有稿件做局部修改时，用户未授权修改的前置章节通过内容指纹保持不变。
 - [ ] 使用 `validate_article.py <article.json> --baseline <pre-revision-article.json>` 时，任何对前四个受保护章节的改动都被阻断；局部任务只修改结果解读或结语可以通过。
-- [ ] 每张版本8图片声明 `mobile_display.strategy`；信息过密的组合图使用裁切、拆分或关键面板策略，并保留原图号和面板标签。
+- [ ] 每张版本8图片声明 `mobile_display.strategy`；优先完整原图，裁剪/拆分/选取面板另需绑定原图及430px裁前/裁后实查证据，整图可读时不能裁剪。缺少必要性记录、截图哈希错误或以过高为由但原图高宽比不足1.8时阻断。
+- [ ] `split_panel`覆盖原图全部面板；省略任何面板只能登记为部分选取，记录省略项及理由，不可称为完整拆分。完整面板组优于零散单面板，必要对照与共享图例须人工核验。
 - [ ] 公开HTML只显示简洁图注，不显示图片来源或许可长句；来源、许可和移动端策略仍保留在结构化数据和QA记录中。
-- [ ] HTML不包含已登记之外的字体或商业字体名称；封面字体文件、SHA-256和SIL OFL 1.1许可证均可核验。
+- [ ] `check_font_policy.py` 在不读取字体文件或字体清单时通过；缺失设备字体回退或嵌入/下载字体时失败。
+- [ ] 两张已有测试封面仍可用于内部离线夹具；即使复制或改名，也不能作为 schema 8 正式稿原图或封面。
+- [ ] 旧封面生成器、字体及六份历史推荐脚本位于插件目录外归档；正式推荐不调用它们，通用JATS证据PDF工具仍可显式提供字体使用。
 - [ ] 旧 JSON 状态可一次性迁移到 SQLite，迁移后完整性与外键检查通过。
 - [ ] 同一时刻只能存在一个活动周期；已选择论文、5轮冷却候选和重复任务运行键被拒绝。
 - [ ] 未选论文在后续5个推荐轮次不可再次出现，并可在第7轮（间隔5轮后）重新进入候选。
@@ -70,6 +73,93 @@
 - [ ] 来源清单未登记或未达到 `SOURCE_VALIDATED` 时，正式文章工件不能写入状态库。
 - [ ] 正式文章缺少 `evidence_level=FULLTEXT`、`fulltext_verified=true` 或来源清单时校验失败。
 - [ ] 摘要级公开材料不足时进入 `EVIDENCE_BLOCKED`，不自动换文、不把摘要扩写为全文结论。
+
+## 科学风险、裁剪与复用回归
+
+使用项目依赖运行 `python -m unittest discover -s scripts -p "test_*.py"` 及 `python scripts/self_test.py`。`examples/quality-risk-cases.json`是明确标注的合成语句夹具，不冒充历史文章；`test_quality_review.py`覆盖网络分型、影像预测、纵向结局、药理/事后亚组、空间关联和新网络指标。
+
+- [ ] 组内显著/不显著冒充组差、横断面分型冒充必经阶段、AUC冒充准确率、空间关联冒充个体预测等产生带定位的待复核项；不因关键词自动拒绝有干预依据的“导致”。
+- [ ] `essential_result=true`的关键结果必须定位至结果/结果解读；关键阴性结果未在相应正文表达时阻断，完整阴性结果保留。
+- [ ] 同一证据主张映射至不同章节时产生重复候选，即使文字不同；不自动删改正文。常规“路径”“层级”专业词不因词汇命中而警告。
+- [ ] 旧稿净增超过20%提示；超过25%须有技术纠错说明并人工核验来源。说明不解锁局部修订的受保护章节。
+- [ ] `verified:true`不能消除风险；摘录须在已登记来源的指定位置实际存在。摘录匹配仅证明可追溯，是否支持该主张仍由科学QA判断；无法确认不登记通过。
+- [ ] 同一输入/代码/所有输出哈希完全一致时，两次构建只执行一次校验和渲染；源文件、JSON、原图、裁剪证据、代码或工件变化均使缓存失效，旧QA和用户批准不因缓存而恢复。
+
+`mobile_display.crop_review`引用内部本地JSON，以`source_figure_id`为键，封面用`cover`。记录示例（占位符须替换为实际检查，不可照抄为证据）：
+
+```json
+{
+  "Fig. 1": {
+    "original_sha256": "<原图SHA-256>",
+    "before": {"path": "work/fig1-whole-430.png", "sha256": "<截图SHA-256>", "verdict": "unreadable"},
+    "after": {"path": "work/fig1-panels-430.png", "sha256": "<截图SHA-256>", "verdict": "readable"},
+    "problem": "<具体哪些原图标签在430px下无法辨读；too_tall须符合原图比例>",
+    "alternative": "<检查过哪些更大完整面板组，为什么仍需当前范围>",
+    "retained_context": "<必要比较、完整坐标、共享图例保留在哪里>",
+    "original_panels": ["A", "B"],
+    "displayed_panels": {"fig1a": ["A"], "fig1b": ["B"]},
+    "omitted_panels": []
+  }
+}
+```
+
+截图宽430像素，可以包含按原文顺序排列的多个展示面板；必须实际查看原图和裁图，不以缩放尺寸、空白截图或笼统“过密”代替。若有省略，`omitted_panels`列全并增加`omission_reason`。覆盖登记与像素一致性由Python检查，保留范围与可读性由视觉QA判断。此记录不进入公众号HTML。
+
+`prepare_article.py --record-qa`遇到科学风险时，额外提供`--risk-review <JSON文件>`，每项格式为：
+
+```json
+[{"id":"<scientific-review.json中的当前风险ID>","decision":"supported","source_path":"<已登记主文/补充文件>","pages":[5],"source_locator":"Methods / subsection / PDF p.5","source_excerpt":"<该页确实存在且支持当前解释的原文短摘录>","reason":"<说明原文设计、分析和当前句子如何对应，不能只写已核实>"}]
+```
+
+PDF页码从1起，XML/文本可省略`pages`。先修正错误句子通常比保留错误并登记解释更合适；修改后的风险ID随句子变化，旧核验不能复用。图像PDF需经实际核对的可登记文本/OCR来源，自动提取失败时保持待复核，不编造摘录。
+
+## 来源事实覆盖与选图预检（第二轮）
+
+执行`python -m unittest discover -s scripts -p "test_*.py"`。`test_fact_coverage.py`使用主题无关的4节点/10特征、条件交互和分析分母夹具；真实论文评估单独保存，不能把人工修复当自动检出。`article.schema.json`和五个主要Skill职责不变。
+
+首读保存`work/research-facts.json`，构建器输出同源可读Markdown。只选高价值事实，不从成稿反向拼一份通过清单：
+
+```json
+{"source_manifest_sha256":"<当前清单哈希>","facts":[{
+  "id":"trial-interaction","kind":"interaction","importance":"core",
+  "statement":"<原文关键交互及其解释边界>",
+  "source":{"path":"<登记主文或补充文件>","pages":[8],"locator":"Results / model paragraph","excerpt":"<指定页实际短摘录>"},
+  "anchors":[["<分析名称或别名>"]],
+  "requires":[["<核心概念及同义表达>"],["<阴性/限定结果及同义表达>"]],
+  "sections":["results","result_interpretation"]
+}]}
+```
+
+`anchors`/`requires`仅检索候选；每组内是别名，组间是合取。可选`applies_when`说明何时结果影响当前解释；`analysis_n`要求相关候选段明确该分析分母；`matrix:{nodes,features,includes_diagonal}`检查非重复矩阵项的算术/范围。`each_location`用于逐处核对高可见性测量层级。验证/敏感性信息允许跨候选段覆盖，交互及具体分母不能由无关段落的数字代替。上述命中均不产生科学通过结论。
+
+既有语义QA在`work/fact-coverage-review.json`记录判断：
+
+```json
+{"article_sha256":"<当前JSON哈希>","facts_sha256":"<当前事实JSON哈希>","decisions":[{
+  "fact_id":"trial-interaction","status":"accurate",
+  "article_locations":["/sections/3/blocks/1/text"],
+  "article_excerpt":"<该正文位置实际存在的摘录>",
+  "reason":"<源文设计/结果如何支持这段解释；不能只写已核实>"
+}]}
+```
+
+状态为`accurate`、`reasonable_omission`、`important_omission`、`misinterpreted`或`source_insufficient`。合理省略须有具体理由，其他判断须有实际正文摘录。只有前两类可登记正式QA；缺事实、来源摘录/哈希失败、未审或过期决定均不得放行。事实支持程度仍须语义判断，不以`verified`、关键词齐全或字段齐全替代。原文/正文定位与候选在`scientific-review.json.fact_coverage`，不进入公众号HTML。
+
+选图在写正文前使用`prepare_article.py <候选JSON> --figures-only`，候选JSON只需现有`figures`结构。复用的`figure-review.html`按430px视口/422px实际图宽展示原图，不改图、不产生QA或批准。实际查看后记录`work/figure-readability.json`：
+
+```json
+{"viewport_css_px":430,"content_width_css_px":422,"assets":{"fig-1":{
+ "asset_sha256":"<当前使用图哈希>","screenshot":"work/fig1-430.png","screenshot_sha256":"<430px视口截图哈希>",
+ "core_labels":["<解释当前结论所需的坐标/组别/图例>"],"core_readable":true,
+ "auxiliary_readable":false,"auxiliary_essential":false,
+ "auxiliary_reason":"<细字为什么不影响本篇具体比较；必要坐标和图例不能降级>",
+ "reason":"<实际检查方法和核心内容可辨情况>"
+}}}
+```
+
+核心不可读、辅助重要性未知/必要却不可读、截图缺失或版本不符均阻断。ND原图不能以裁剪补救，可另选合法整图。截图与这些记录只能支持实际视觉审校，Python不能据布尔值识字。
+
+正式schema 8 FULLTEXT再次登记QA需补齐上述内部记录；历史稿仍可读取、渲染，不自动迁移或改写。事实、语义决定、可读性记录/截图改变使旧QA/批准失效；仅审查变化时复用未改变且哈希完整的HTML/图片编码，不重复渲染。无逐篇实际usage时记录“未测量”，不能把字数或工具调用当Token账单。
 
 ## API 测试
 

@@ -12,14 +12,20 @@ import argparse
 import json
 import mimetypes
 import os
+import re
 import sys
 import uuid
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 from urllib import error, parse, request
 
+from PIL import Image
+
 from validate_article import load_article, validate_article
+from article_artifacts import verify_review
+from render_wechat_html import render_article
 
 
 API_BASE = "https://api.weixin.qq.com"
@@ -103,14 +109,22 @@ def post_media(
     field_name: str = "media",
 ) -> dict[str, Any]:
     boundary = f"----mriwechat{uuid.uuid4().hex}"
-    mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    filename = path.name
+    media_bytes = path.read_bytes()
+    if path.suffix.lower() == ".webp":
+        with Image.open(BytesIO(media_bytes)) as image:
+            converted = BytesIO()
+            image.save(converted, format="PNG")
+        media_bytes = converted.getvalue()
+        filename = f"{path.stem}.png"
+    mime = mimetypes.guess_type(filename)[0] or "application/octet-stream"
     head = (
         f"--{boundary}\r\n"
-        f'Content-Disposition: form-data; name="{field_name}"; filename="{path.name}"\r\n'
+        f'Content-Disposition: form-data; name="{field_name}"; filename="{filename}"\r\n'
         f"Content-Type: {mime}\r\n\r\n"
     ).encode("utf-8")
     tail = f"\r\n--{boundary}--\r\n".encode("ascii")
-    body = head + path.read_bytes() + tail
+    body = head + media_bytes + tail
     req = request.Request(
         url,
         data=body,
@@ -236,6 +250,7 @@ def rewrite_inline_images(
     article_path: Path,
     content: str,
 ) -> tuple[str, list[dict[str, str]]]:
+    validate_upload_html(article, content)
     uploaded: list[dict[str, str]] = []
     for figure in article.get("figures", []):
         asset_id = figure["asset_id"]
@@ -251,6 +266,18 @@ def rewrite_inline_images(
     if "wechat-asset://" in content:
         raise WeChatApiError("正文仍包含未解析的本地图片占位符。")
     return content, uploaded
+
+
+def validate_upload_html(article: dict[str, Any], content: str) -> None:
+    """Reject local previews before any image is sent to WeChat."""
+    if re.search(r'<img\b[^>]*\bsrc\s*=\s*[\"\'](?:data:|file:)', content, re.I):
+        raise WeChatApiError("这是本地预览，请使用 prepare_article.py 生成的 wechat-upload.html。")
+    expected = {f'wechat-asset://{f["asset_id"]}' for f in article.get("figures", [])}
+    actual = set(re.findall(r'wechat-asset://[^\s\"\'<>]+', content))
+    if expected != actual:
+        raise WeChatApiError("上传HTML图片占位与文章JSON不一致；请从同一份JSON重新生成 wechat-upload.html。")
+    if content.replace("\r\n", "\n") != render_article(article):
+        raise WeChatApiError("上传HTML与当前文章JSON不一致，请重新生成和复核。")
 
 
 def write_receipt(path: Path, receipt: dict[str, Any]) -> None:
@@ -302,6 +329,8 @@ def main() -> int:
         if not html_path.is_file():
             raise WeChatApiError(f"HTML 文件不存在：{html_path}")
         content = html_path.read_text(encoding="utf-8")
+        if not args.check_token_only and not args.verify_media_id:
+            validate_upload_html(article, content)
 
         if args.check_token_only:
             presence = credential_presence()
@@ -350,6 +379,9 @@ def main() -> int:
             return 0
 
         cover_path = resolve_required_cover(article, article_path, args.cover)
+        if (article.get("source", {}).get("evidence_level") == "FULLTEXT" and args.cover
+                and cover_path != resolve_required_cover(article, article_path)):
+            raise WeChatApiError("正式稿封面必须与已复核JSON一致；更换封面后需重新生成和复核。")
 
         plan = {
             "status": "EXECUTION_REQUESTED" if args.execute else "DRY_RUN_READY",
@@ -372,6 +404,8 @@ def main() -> int:
             raise WeChatApiError(
                 f"实时写入需要 --approval-token {APPROVAL_TOKEN}；该标记只能在用户明确同意保存草稿后使用。"
             )
+        if article.get("source", {}).get("evidence_level") == "FULLTEXT":
+            verify_review(article_path, html_path, require_approval=True)
         presence = credential_presence()
         if not all(presence.values()):
             raise WeChatApiError(f"本地凭据未配置完整：{presence}。不要在聊天中粘贴 AppSecret。")
