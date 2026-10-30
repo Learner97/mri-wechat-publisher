@@ -1,6 +1,9 @@
 """Source-first, topic-independent fixtures; real-paper evaluation stays read-only."""
 import copy
 import json
+import os
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -192,6 +195,22 @@ class PolarityAndFigureTests(unittest.TestCase):
         self.assertTrue(readability_gate(article, p.parent, AssetStore()))
         row.update(core_readable=True, auxiliary_essential=True); path.write_text(json.dumps(data), encoding="utf-8")
         self.assertTrue(readability_gate(article, p.parent, AssetStore()))
+
+    def test_cli_json_is_utf8_even_with_cp1252_environment(self):
+        helper = fixtures.ArticleImageTests(); helper.setUp(); self.addCleanup(helper.doCleanups)
+        path, _ = helper.production_bundle()
+        article = json.loads(path.read_text(encoding="utf-8"))
+        article["title"] = "Nat Commun | " + "矩阵计算与核心阴性结果的准确解释" * 2
+        path.write_text(json.dumps(article, ensure_ascii=False), encoding="utf-8")
+        env = dict(os.environ, PYTHONIOENCODING="cp1252")
+        for script in ("validate_article.py", "prepare_article.py"):
+            with self.subTest(script=script):
+                result = subprocess.run([sys.executable, str(Path(__file__).with_name(script)), str(path)],
+                                        env=env, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", errors="replace"))
+                output = result.stdout.decode("utf-8")
+                self.assertIn("标题题眼", output)
+                self.assertTrue(json.loads(output)["warnings"])
 
     def test_selection_preview_does_not_require_a_generated_article(self):
         helper = fixtures.ArticleImageTests(); helper.setUp(); self.addCleanup(helper.doCleanups)
