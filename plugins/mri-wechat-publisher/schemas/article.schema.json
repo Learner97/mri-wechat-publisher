@@ -17,11 +17,22 @@
     "references",
     "evidence_map"
   ],
+  "$defs": {
+    "image_provenance": {
+      "type": "object", "additionalProperties": false,
+      "required": ["original_path", "original_sha256", "source_locator"],
+      "properties": {
+        "original_path": {"type": "string", "minLength": 1},
+        "original_sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+        "source_locator": {"type": "string", "minLength": 1}
+      }
+    }
+  },
   "properties": {
     "schema_version": {"enum": [1, 2, 3, 4, 5, 6, 7, 8]},
     "article_id": {"type": "string", "minLength": 1, "maxLength": 100},
     "publication_mode": {"const": "draft_only"},
-    "title": {"type": "string", "minLength": 5, "maxLength": 64, "pattern": "^[^|\\s](?:[^|\\r\\n]*[^|\\s])? \\| [^|\\s](?:[^|\\r\\n]{0,18}[^|\\s])?$"},
+    "title": {"type": "string", "minLength": 5, "maxLength": 64, "pattern": "^[^|\\s](?:[^|\\r\\n]*[^|\\s])? \\| [^|\\s](?:[^|\\r\\n]*[^|\\s])?$"},
     "author": {"type": "string", "minLength": 1, "maxLength": 64},
     "digest": {"type": "string", "minLength": 1, "maxLength": 120},
     "content_source_url": {"type": "string"},
@@ -67,6 +78,9 @@
       "additionalProperties": false,
       "required": ["path", "alt", "source_note"],
       "properties": {
+        "figure_id": {"type": "string", "minLength": 1},
+        "image_provenance": {"$ref": "#/$defs/image_provenance"},
+        "mobile_display": {"$ref": "#/properties/figures/items/properties/mobile_display"},
         "path": {"type": "string", "minLength": 1},
         "alt": {"type": "string", "minLength": 1},
         "source_note": {"type": "string", "minLength": 1}
@@ -110,6 +124,7 @@
         "properties": {
           "asset_id": {"type": "string", "minLength": 1},
           "figure_id": {"type": "string", "minLength": 1},
+          "image_provenance": {"$ref": "#/$defs/image_provenance"},
           "path": {"type": "string", "minLength": 1},
           "alt": {"type": "string", "minLength": 1},
           "caption": {"type": "string", "minLength": 1},
@@ -122,7 +137,12 @@
             "properties": {
               "strategy": {"enum": ["native", "cropped", "split_panel", "selected_panels"]},
               "source_figure_id": {"type": "string", "minLength": 1},
-              "panel_label": {"type": "string", "minLength": 1}
+              "panel_label": {"type": "string", "minLength": 1},
+              "review_note": {"type": "string", "minLength": 1},
+              "crop_review": {"type": "string", "minLength": 1},
+              "crop_reason": {"enum": ["dense_composite", "too_tall", "cover_ratio"]},
+              "crop_box": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"type": "integer", "minimum": 0}},
+              "annotations_preserved": {"type": "boolean"}
             },
             "allOf": [
               {
@@ -174,7 +194,10 @@
               "editorial_extension"
             ]
           },
-          "status": {"enum": ["verified", "blocked"]}
+          "status": {"enum": ["verified", "blocked", "needs_review"]},
+          "risk_tags": {"type": "array", "uniqueItems": true, "items": {"enum": ["subtype_stage", "crosssection_change", "association_causality", "mr_assumptions", "interaction_inference", "validation_scope", "metric_interpretation", "spatial_to_individual", "metric_definition", "sample_denominator"]}},
+          "article_locations": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^/(?:sections/\\d+/blocks/\\d+/(?:text|items/\\d+)|title|digest)$"}},
+          "essential_result": {"type": "boolean"}
         }
       }
     },
@@ -258,6 +281,18 @@
     }
   },
   "allOf": [
+    {
+      "if": {
+        "properties": {"schema_version": {"const": 8}, "source": {"properties": {"evidence_level": {"const": "FULLTEXT"}}}},
+        "required": ["schema_version", "source"]
+      },
+      "then": {
+        "properties": {
+          "cover": {"required": ["figure_id", "image_provenance", "mobile_display"]},
+          "figures": {"items": {"required": ["image_provenance"]}}
+        }
+      }
+    },
     {
       "if": {
         "properties": {"schema_version": {"const": 1}},

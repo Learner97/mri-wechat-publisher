@@ -315,7 +315,7 @@ def main() -> int:
         "空间相关证明了区域基因表达直接驱动影像变化。"
     )
     causal_result = validate_article(causal_overclaim, article_path)
-    if not any("可能被写成因果或机制证据" in warning for warning in causal_result["warnings"]):
+    if not any("科学待复核[association_causality]" in warning for warning in causal_result["warnings"]):
         raise AssertionError("association-to-causation wording should trigger a review warning")
 
     variable_result_count = copy.deepcopy(article)
@@ -452,8 +452,8 @@ def main() -> int:
     assert_blocked(leaked_secret, article_path, "credential leakage")
 
     too_long_title = copy.deepcopy(article)
-    too_long_title["title"] = "测试期刊 | " + "测" * 21
-    assert_blocked(too_long_title, article_path, "title hook length")
+    too_long_title["title"] = "测试期刊 | " + "测" * 65
+    assert_blocked(too_long_title, article_path, "full title hard limit")
 
     full_title_over_limit = copy.deepcopy(article)
     full_title_over_limit["title"] = "超长测试期刊名称" * 8 + " | 合法题眼"
@@ -513,7 +513,7 @@ def main() -> int:
         "测试\n期刊 | 合法题眼": False,
         "测试期刊 | 合法\n题眼": False,
         "测试期刊 | 方法 | 结果": False,
-        "测试期刊 | " + "测" * 21: False,
+        "测试期刊 | " + "测" * 25: True,
     }
     for candidate_title, expected in title_contract_cases.items():
         candidate = copy.deepcopy(article)

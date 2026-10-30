@@ -4,16 +4,15 @@
 from __future__ import annotations
 
 import argparse
-import base64
 import html
 import json
-import mimetypes
 import re
 import sys
 from pathlib import Path
 from typing import Any
 
 from validate_article import load_article, validate_article
+from article_artifacts import AssetStore
 
 
 FORBIDDEN_HTML_PATTERNS = [
@@ -99,7 +98,7 @@ def render_article(
     parts = [
         '<section data-plugin="mri-wechat-publisher" '
         f'data-schema-version="{int(article.get("schema_version", 1))}" '
-        'style="box-sizing:border-box;max-width:677px;margin:0 auto;padding:8px 4px;'
+        'style="box-sizing:border-box;width:100%;max-width:677px;margin:0 auto;padding:8px 4px;'
         f'font-family:{SYSTEM_FONT_STACK};">',
         '<h1 style="margin:8px 0 14px;font-size:24px;line-height:1.45;color:#173f5f;'
         'font-weight:700;text-align:left;overflow-wrap:anywhere;word-break:break-word;">'
@@ -142,19 +141,30 @@ def render_article(
 
 
 def build_embedded_asset_sources(
-    article: dict[str, Any], article_path: Path
+    article: dict[str, Any], article_path: Path, assets: AssetStore | None = None
 ) -> dict[str, str]:
     """Build data-URI sources for local review without changing article JSON."""
     sources: dict[str, str] = {}
+    assets = assets or AssetStore()
     for figure in article.get("figures", []):
         path = str(figure.get("path", ""))
         if re.match(r"^https?://", path, re.IGNORECASE):
             continue
         resolved = (article_path.parent / path).resolve()
-        mime_type = mimetypes.guess_type(resolved.name)[0] or "application/octet-stream"
-        encoded = base64.b64encode(resolved.read_bytes()).decode("ascii")
-        sources[figure["asset_id"]] = f"data:{mime_type};base64,{encoded}"
+        sources[figure["asset_id"]] = assets.data_uri(resolved)
     return sources
+
+
+def render_preview(article: dict[str, Any], article_path: Path, asset_sources: dict[str, str] | None = None) -> str:
+    """Self-contained local deliverable; upload placeholders stay in render_article."""
+    rendered = render_article(article, asset_sources if asset_sources is not None
+                              else build_embedded_asset_sources(article, article_path))
+    return (
+        '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<title>' + html.escape(article["title"]) + '</title></head>'
+        '<body style="margin:0;background:#fff;">' + rendered + '</body></html>'
+    )
 
 
 def main() -> int:
@@ -166,28 +176,25 @@ def main() -> int:
         action="store_true",
         help="Embed local figures as data URIs for a self-contained review preview.",
     )
+    parser.add_argument(
+        "--for-upload", action="store_true",
+        help="Explicitly generate the upload fragment containing wechat-asset placeholders.",
+    )
     args = parser.parse_args()
+    if args.for_upload and args.embed_local_assets:
+        parser.error("--for-upload and --embed-local-assets are mutually exclusive")
 
     article_path = args.article.resolve()
     article = load_article(article_path)
-    qa = validate_article(article, article_path)
+    assets = AssetStore()
+    qa = validate_article(article, article_path, assets=assets)
     if qa["status"] != "QA_PASSED":
         print(json.dumps(qa, ensure_ascii=False, indent=2), file=sys.stderr)
         return 1
 
-    asset_sources = (
-        build_embedded_asset_sources(article, article_path)
-        if args.embed_local_assets
-        else None
+    rendered = render_article(article) if args.for_upload else render_preview(
+        article, article_path, build_embedded_asset_sources(article, article_path, assets)
     )
-    rendered = render_article(article, asset_sources)
-    if args.embed_local_assets:
-        rendered = (
-            '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">'
-            '<meta name="viewport" content="width=device-width,initial-scale=1">'
-            '<title>' + html.escape(article["title"]) + '</title></head>'
-            '<body style="margin:0;background:#fff;">' + rendered + '</body></html>'
-        )
     output_path = args.output.resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(rendered, encoding="utf-8")
@@ -196,7 +203,7 @@ def main() -> int:
         "output": str(output_path),
         "html_characters": len(rendered),
         "contains_local_asset_placeholders": "wechat-asset://" in rendered,
-        "embedded_local_asset_count": len(asset_sources or {}),
+        "embedded_local_asset_count": 0 if args.for_upload else rendered.count('src="data:image/'),
         **qa["statistics"],
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))

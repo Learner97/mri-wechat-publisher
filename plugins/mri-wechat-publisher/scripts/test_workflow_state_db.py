@@ -91,6 +91,103 @@ def register_test_source(
 
 
 class WorkflowStateDatabaseTest(unittest.TestCase):
+    def test_cancel_queued_item_preserves_active_item(self) -> None:
+        root = make_test_root("cancel-queued-item-test")
+        self.addCleanup(shutil.rmtree, root, True)
+        connection = None
+        try:
+            db_path = root / "workflow.db"
+            recommendations_path = root / "recommendations.json"
+            write_json(
+                recommendations_path,
+                {
+                    "generated_at": "2026-08-19T18:00:00+08:00",
+                    "candidates": [
+                        {
+                            "choice": 1,
+                            "title": "Active paper",
+                            "doi": "10.1000/active",
+                        },
+                        {
+                            "choice": 2,
+                            "title": "Queued paper",
+                            "doi": "10.1000/queued",
+                        },
+                    ],
+                },
+            )
+            connection = store.connect(db_path)
+            store.initialize(connection)
+            store.create_cycle(connection, "cancel-test", recommendations_path, None)
+            store.select_ordered_candidates(connection, [1, 2], None)
+
+            result = store.cancel_queued_item(
+                connection,
+                "cancel-test",
+                2,
+                "user removed the second queued paper",
+            )
+
+            self.assertEqual(result["status"], "CANCELLED")
+            self.assertEqual(result["doi"], "10.1000/queued")
+            queue = store.selection_queue_status(connection)
+            self.assertEqual(queue["active_count"], 1)
+            self.assertEqual(queue["queued_count"], 0)
+            self.assertEqual(
+                [item["status"] for item in queue["items"]],
+                ["ACTIVE", "CANCELLED"],
+            )
+            self.assertEqual(
+                store.active_cycle(connection)["cycle_id"],
+                "cancel-test",
+            )
+
+            store.transition_cycle(
+                connection,
+                "cancel-test",
+                "SELECTED",
+                "CANCELLED",
+                "finish focused cancellation test",
+            )
+            exclusions = store.recommendation_exclusions(connection)
+            self.assertEqual(exclusions["permanent_exclusions"], [])
+            self.assertEqual(
+                {item["doi"] for item in exclusions["cooldown_exclusions"]},
+                {"10.1000/active", "10.1000/queued"},
+            )
+            for item in exclusions["cooldown_exclusions"]:
+                self.assertEqual(item["eligible_from_round"], 7)
+
+            carry_over_path = root / "carry-over.json"
+            write_json(
+                carry_over_path,
+                {
+                    "generated_at": "2026-08-19T18:10:00+08:00",
+                    "carry_over_cancelled_dois": ["10.1000/queued"],
+                    "candidates": [
+                        {
+                            "choice": 1,
+                            "title": "Queued paper",
+                            "doi": "10.1000/queued",
+                        }
+                    ],
+                },
+            )
+            count = store.create_cycle(
+                connection,
+                "carry-over-test",
+                carry_over_path,
+                None,
+            )
+            self.assertEqual(count, 1)
+            self.assertEqual(
+                store.active_cycle(connection)["cycle_id"],
+                "carry-over-test",
+            )
+        finally:
+            if connection is not None:
+                connection.close()
+
     def test_migration_and_full_cycle(self) -> None:
         root = make_test_root("workflow-test")
         self.addCleanup(shutil.rmtree, root, True)
@@ -231,30 +328,25 @@ class WorkflowStateDatabaseTest(unittest.TestCase):
 
             article_path = root / "article.json"
             preview_path = root / "preview.html"
-            write_json(
-                article_path,
-                {
-                    "schema_version": 1,
-                    "article_id": "article-new",
-                    "publication_mode": "draft_only",
-                    "title": "新文章",
-                    "source": {
-                        "title": "New MRI paper",
-                        "source_id": "10.1000/new",
-                        "doi": "10.1000/new",
-                        "evidence_level": "FULLTEXT",
-                        "fulltext_verified": True,
-                        # The article may use a different textual path for the same file.
-                        # The workflow gate must compare file identity cross-platform.
-                        "source_manifest": str(source_manifest_reference),
-                    },
-                    "sections": [],
-                    "figures": [],
-                    "references": [],
-                    "evidence_map": [],
-                },
-            )
-            preview_path.write_text("<p>preview</p>", encoding="utf-8")
+            # Use a valid legacy article to exercise the existing queue flow.
+            from render_wechat_html import render_article, render_preview
+            plugin_root = Path(__file__).resolve().parents[1]
+            payload = json.loads((plugin_root / "examples" / "phase1-test-article.json").read_text(encoding="utf-8"))
+            payload.update(schema_version=1, article_id="article-new", title="测试期刊 | 新文章")
+            payload.pop("method_map")
+            payload["source"].update(title="New MRI paper", source_id="10.1000/new",
+                                     doi="10.1000/new", evidence_level="FULLTEXT",
+                                     fulltext_verified=True, source_manifest=str(source_manifest_reference))
+            payload["cover"]["path"] = str(plugin_root / "assets" / "phase1-test-cover.png")
+            payload["sections"] = payload["sections"][:5]
+            for section, (section_id, heading) in zip(payload["sections"], [
+                ("abstract", "摘要解读"), ("design", "研究设计与数据"), ("method", "核心方法解析"),
+                ("results", "关键结果与证据链"), ("implications", "方法启示与总结"),
+            ]):
+                section.update(id=section_id, heading=heading)
+            write_json(article_path, payload)
+            preview_path.write_text(render_preview(payload, article_path), encoding="utf-8")
+            (root / "wechat-upload.html").write_text(render_article(payload), encoding="utf-8")
             artifact_result = store.set_artifacts(
                 connection,
                 "cycle-2026-08-04",
@@ -272,7 +364,7 @@ class WorkflowStateDatabaseTest(unittest.TestCase):
                     "status": "DRAFT_SAVED",
                     "publication_mode": "draft_only",
                     "article_id": "article-new",
-                    "title": "新文章",
+                    "title": "测试期刊 | 新文章",
                     "draft_media_id": "media-new",
                     "transport": "test",
                     "saved_at_utc": "2026-08-05T02:00:00+00:00",

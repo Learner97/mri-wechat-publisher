@@ -7,60 +7,16 @@ import argparse
 import json
 import re
 import sys
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from validate_figure import validate_figure, crop_decision
+from article_artifacts import AssetStore
+from article_review import review_article
+from fact_coverage import review_coverage
+from jsonschema import Draft202012Validator
 
-LEGACY_SECTIONS = [
-    ("abstract", "摘要解读"),
-    ("design", "研究设计与数据"),
-    ("method", "核心方法解析"),
-    ("results", "关键结果与证据链"),
-    ("implications", "方法启示与总结"),
-]
-
-VERSION_2_SECTIONS = [
-    ("abstract", "摘要"),
-    ("introduction", "引言"),
-    ("methods", "方法"),
-    ("results", "结果"),
-    ("discussion", "讨论与总结"),
-]
-
-CURRENT_SECTIONS = [
-    ("abstract", "摘要"),
-    ("introduction", "引言"),
-    ("methods", "方法"),
-    ("results", "结果"),
-    ("discussion", "讨论"),
-    ("summary", "总结"),
-]
-
-VERSION_6_SECTIONS = [
-    ("abstract", "摘要"),
-    ("introduction", "引言"),
-    ("methods", "方法"),
-    ("results", "结果"),
-    ("result_interpretation", "结果解读"),
-    ("closing", "结语"),
-]
-
-VERSION_6_SECTIONS_WITH_METHOD_INSIGHTS = [
-    *VERSION_6_SECTIONS[:-1],
-    ("method_insights", "方法启示"),
-    VERSION_6_SECTIONS[-1],
-]
-
-VERSION_7_SECTIONS = VERSION_6_SECTIONS
-
-VERSION_8_SECTIONS = [
-    ("overview", "研究速览"),
-    ("introduction", "引言"),
-    ("methods", "方法"),
-    ("results", "结果"),
-    ("result_interpretation", "结果解读"),
-    ("closing", "结语"),
-]
 
 CURRENT_SCHEMA_VERSION = 8
 
@@ -128,14 +84,8 @@ TECHNICAL_META_PHRASES = {
 }
 PAPER_SUBJECT_PATTERN = re.compile(r"论文(?:进行|发现|提出|采用|使用|分析|检验|报告)")
 STYLE_WARNING_TERMS = {
-    "边界",
     "收束",
-    "链条",
-    "路径",
     "范式",
-    "层级",
-    "真正",
-    "值得",
 }
 GENERIC_RESULT_SUBHEADINGS = {
     "关键结果",
@@ -236,26 +186,6 @@ METHOD_PARAMETER_TOKEN_PATTERN = re.compile(
     r"|(?:步长|流线长度|迭代次数|软件版本|响应函数|球形反卷积|追踪算法))",
     re.IGNORECASE,
 )
-ASSOCIATION_ANALYSIS_TERMS = {
-    "相关",
-    "空间关联",
-    "空间对应",
-    "空间关系",
-    "富集",
-    "基因表达",
-    "PLS",
-    "中心性",
-}
-CAUSAL_OVERCLAIM_PHRASES = {
-    "导致",
-    "引起",
-    "造成",
-    "驱动",
-    "决定了",
-    "证明了",
-    "直接机制",
-    "机制证据",
-}
 CORRECTIVE_EDITORIAL_PHRASES = {
     "不等同于",
     "不表示",
@@ -469,77 +399,37 @@ def _paragraph_statistics(
     return statistics, fragmented_runs, standalone_transitions, opening_counts
 
 
+@lru_cache(maxsize=1)
+def article_schema_validator() -> Draft202012Validator:
+    path = Path(__file__).resolve().parents[1] / "schemas" / "article.schema.json"
+    return Draft202012Validator(json.loads(path.read_text(encoding="utf-8")))
+
+
 def validate_article(
     article: dict[str, Any],
     article_path: Path | None = None,
     baseline_article: dict[str, Any] | None = None,
+    assets: AssetStore | None = None,
+    technical_revision_reason: str | None = None,
 ) -> dict[str, Any]:
     errors: list[str] = []
     warnings: list[str] = []
+    errors = [f"schema {error.json_path}: {error.message}"
+              for error in article_schema_validator().iter_errors(article)]
+    if errors:
+        return {"status": "QA_BLOCKED", "errors": errors, "warnings": [], "statistics": {}}
+    assets = assets or AssetStore()
+    figure_checks = {}
 
     schema_version = article.get("schema_version")
-    if schema_version not in {1, 2, 3, 4, 5, 6, 7, 8}:
-        errors.append("schema_version 必须为 1 至 7（历史兼容）或 8（当前规范）。")
-    has_method_insights = any(
-        isinstance(section, dict) and section.get("id") == "method_insights"
-        for section in article.get("sections", [])
-    )
-    expected_sections = {
-        1: LEGACY_SECTIONS,
-        2: VERSION_2_SECTIONS,
-        3: CURRENT_SECTIONS,
-        4: CURRENT_SECTIONS,
-        5: CURRENT_SECTIONS,
-        6: (
-            VERSION_6_SECTIONS_WITH_METHOD_INSIGHTS
-            if has_method_insights
-            else VERSION_6_SECTIONS
-        ),
-        7: VERSION_7_SECTIONS,
-        8: VERSION_8_SECTIONS,
-    }.get(schema_version, VERSION_8_SECTIONS)
-    if schema_version == 1:
-        warnings.append("该文章使用历史 schema_version=1；新文章必须使用版本 8。")
-    elif schema_version == 2:
-        warnings.append("该文章使用历史 schema_version=2 五段式结构；新文章必须使用版本 8。")
-    elif schema_version == 3:
-        warnings.append("该文章使用历史 schema_version=3；新文章必须使用版本 8。")
-    elif schema_version == 4:
-        warnings.append("该文章使用历史 schema_version=4；新文章必须使用版本 8。")
-    elif schema_version == 5:
-        warnings.append("该文章使用历史 schema_version=5；新文章必须使用研究速览、结果解读与结语结构的版本 8。")
-    elif schema_version == 6:
-        warnings.append("该文章使用历史 schema_version=6；新文章必须使用版本 8。")
-    elif schema_version == 7:
-        warnings.append("该文章使用历史 schema_version=7；新文章使用以研究速览开头的版本 8。")
-
-    if article.get("publication_mode") != "draft_only":
-        errors.append("publication_mode 必须严格等于 draft_only。")
-
-    for field, maximum in (("article_id", 100), ("title", 64), ("author", 64), ("digest", 120)):
-        value = article.get(field)
-        if not isinstance(value, str) or not value.strip():
-            errors.append(f"{field} 必须是非空字符串。")
-        elif len(value.strip()) > maximum:
-            errors.append(f"{field} 超过 {maximum} 个字符。")
-
-    title = article.get("title")
-    if isinstance(title, str) and title.strip():
-        title_text = title.strip()
-        if title != title_text:
-            errors.append("title 首尾不得包含空白字符。")
-        elif "\r" in title_text or "\n" in title_text:
-            errors.append("title 不得包含换行。")
-        else:
-            parts = title_text.split(" | ")
-            if (
-                len(parts) != 2
-                or "|" in title_text.replace(" | ", "")
-                or not all(part and part == part.strip() for part in parts)
-            ):
-                errors.append("title 必须使用“期刊全名或公认缩写 | 简短内容题眼”结构。")
-            elif len(parts[1]) > 20:
-                errors.append("title 的内容主标题（` | ` 之后）超过 20 个字符。")
+    if schema_version < CURRENT_SCHEMA_VERSION:
+        warnings.append(f"该文章使用历史 schema_version={schema_version}；新文章必须使用版本 8。")
+    for field in ("article_id", "title", "author", "digest"):
+        if not article[field].strip():
+            errors.append(f"{field} 必须包含有效文字。")
+    hook = article["title"].split(" | ", 1)[-1]
+    if len(hook) > 24:
+        warnings.append("标题题眼超过偏好长度24字符；优先保留对象、方向及必要限定，不为压缩损害准确性。")
 
     cover = article.get("cover")
     if cover is not None:
@@ -620,23 +510,9 @@ def validate_article(
                 "局部修改越界：研究速览或摘要、引言、方法或结果与基线文章不一致；"
                 "局部修订只能修改用户指定的结果解读和结语。"
             )
-    if len(sections) != len(expected_sections):
-        errors.append(f"sections 必须且只能包含 {len(expected_sections)} 个固定章节。")
-
     referenced_figures: set[str] = set()
-    for index, expected in enumerate(expected_sections):
-        if index >= len(sections) or not isinstance(sections[index], dict):
-            continue
-        section = sections[index]
-        expected_id, expected_heading = expected
-        if section.get("id") != expected_id or section.get("heading") != expected_heading:
-            errors.append(
-                f"第 {index + 1} 节必须为 id={expected_id!r}、heading={expected_heading!r}。"
-            )
-        blocks = section.get("blocks")
-        if not isinstance(blocks, list) or not blocks:
-            errors.append(f"章节“{expected_heading}”至少需要一个内容块。")
-            continue
+    for index, section in enumerate(sections):
+        blocks = section["blocks"]
         for block_index, block in enumerate(blocks):
             location = f"sections[{index}].blocks[{block_index}]"
             if not isinstance(block, dict):
@@ -712,6 +588,29 @@ def validate_article(
         errors.append(f"正文引用了未定义的图片：{asset_id}")
     for asset_id in sorted(figure_ids - referenced_figures):
         warnings.append(f"图片已定义但未在正文使用：{asset_id}")
+
+    if schema_version == CURRENT_SCHEMA_VERSION and isinstance(source, dict) and source.get("evidence_level") == "FULLTEXT":
+        reviewed_assets = [(f"figures[{i}]", item, False) for i, item in enumerate(figures) if isinstance(item, dict)]
+        if isinstance(article.get("cover"), dict):
+            reviewed_assets.append(("cover", article["cover"], True))
+        for location, asset, is_cover in reviewed_assets:
+            image_qa = validate_figure(asset, base_dir, cover=is_cover, assets=assets)
+            figure_checks[location] = image_qa
+            errors.extend(f"{location}: {message}" for message in image_qa["errors"])
+            warnings.extend(f"{location}: {message}" for message in image_qa["warnings"])
+        groups = {}
+        for figure in figures:
+            mobile = figure.get("mobile_display", {})
+            if mobile.get("strategy") != "native":
+                key = (mobile.get("crop_review"), mobile.get("source_figure_id"))
+                groups.setdefault(key, []).append(figure)
+        for group in groups.values():
+            try:
+                record = crop_decision(group[0], base_dir, assets)
+                if set(record["displayed_panels"]) != {f["asset_id"] for f in group}:
+                    errors.append("裁剪面板清单与实际正文图片不一致，不能声称完整拆分却缺少面板图片。")
+            except (OSError, ValueError, KeyError, TypeError):
+                pass  # Individual image errors above identify the invalid record.
 
     references = article.get("references")
     if not isinstance(references, list) or not references:
@@ -1071,10 +970,8 @@ def validate_article(
                 if not isinstance(block, dict) or block.get("type") != "subheading":
                     continue
                 heading = str(block.get("text") or "").strip()
-                if heading in GENERIC_RESULT_SUBHEADINGS or "证据" in heading:
+                if heading in GENERIC_RESULT_SUBHEADINGS or re.match(r"^(?:证据|关键证据)[一二三四五六七八九十0-9]+(?:[：:、\s]|$)", heading):
                     errors.append(f"结果小标题必须直接描述发现，不能使用泛化标签：{heading}")
-            if "证据" in _section_text(results_section):
-                warnings.append("结果部分出现“证据”；请确认是否可改为对原始结果的直接描述。")
             statistic_heavy_blocks = []
             for block_index, block in enumerate(results_section.get("blocks", []), start=1):
                 if not isinstance(block, dict) or block.get("type") != "paragraph":
@@ -1087,27 +984,6 @@ def validate_article(
                     "结果段统计量可能过度堆积；只保留决定主要结论成立与否的关键统计量："
                     + "、".join(statistic_heavy_blocks)
                 )
-
-        causal_locations = []
-        for section in sections:
-            if not isinstance(section, dict) or section.get("id") not in {
-                "results",
-                "result_interpretation",
-                "closing",
-            }:
-                continue
-            for sentence in _sentences(_section_text(section)):
-                if any(term in sentence for term in ASSOCIATION_ANALYSIS_TERMS) and any(
-                    phrase in sentence for phrase in CAUSAL_OVERCLAIM_PHRASES
-                ):
-                    causal_locations.append(
-                        f"{section.get('heading', section.get('id'))}：{sentence}"
-                    )
-        if causal_locations:
-            warnings.append(
-                "相关、空间对应或富集结果可能被写成因果或机制证据；请按研究设计降低结论强度："
-                + "；".join(causal_locations[:4])
-            )
 
         if schema_version in {3, 4, 5, 6, 7, 8}:
             summary_section = next(
@@ -1233,10 +1109,32 @@ def validate_article(
                         "方法层评论不必强制出现。"
                     )
 
+    semantic_review = review_article(article)
+    semantic_review["fact_coverage"] = review_coverage(article, article_path, assets)
+    semantic_review["risks"].extend(semantic_review["fact_coverage"]["findings"])
+    if semantic_review["risks"]:
+        semantic_review["status"] = "REVIEW_REQUIRED"
+    for finding in semantic_review["risks"]:
+        message = f"科学待复核[{finding['risk']}] {finding['location']}：{finding['check']}"
+        if finding.get("source_locator"):
+            message += f" 来源：{finding['source_locator']}"
+        (errors if finding["blocking"] else warnings).append(message)
+    if semantic_review["repetition_candidates"]:
+        warnings.append("跨章节科学信息可能重复；查看scientific-review.json的定位，仅局部修订，不自动删改。")
+    revision_growth = None
+    if baseline_article is not None:
+        old_length = _plain_text_length(baseline_article)
+        revision_growth = round((body_characters - old_length) / max(1, old_length), 4)
+        if revision_growth > .25 and not str(technical_revision_reason or "").strip():
+            errors.append("旧稿正文净增超过25%；先删重复，技术纠错确需扩充时提供technical_revision_reason并核验新增来源。")
+        elif revision_growth > .20:
+            warnings.append("旧稿正文净增超过默认20%，需复核新增内容必要性，不改写未授权章节。")
     return {
         "status": "QA_PASSED" if not errors else "QA_BLOCKED",
         "errors": errors,
         "warnings": warnings,
+        "figure_checks": figure_checks,
+        "semantic_review": semantic_review,
         "statistics": {
             "title_characters": len(str(article.get("title", "")).strip()),
             "title_hook_characters": (
@@ -1262,6 +1160,7 @@ def validate_article(
             "section_characters": section_characters,
             "section_shares": section_shares,
             "paragraph_statistics": paragraph_statistics,
+            "revision_growth": revision_growth,
         },
     }
 
@@ -1275,6 +1174,7 @@ def main() -> int:
         help="Optional pre-revision article used to enforce identical protected sections.",
     )
     parser.add_argument("--compact", action="store_true", help="Print compact JSON.")
+    parser.add_argument("--technical-revision-reason", help="Source-supported technical correction requiring >25% growth; does not unlock protected sections.")
     args = parser.parse_args()
 
     try:
@@ -1284,6 +1184,7 @@ def main() -> int:
             load_article(article_path),
             article_path,
             baseline_article=baseline_article,
+            technical_revision_reason=args.technical_revision_reason,
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         result = {

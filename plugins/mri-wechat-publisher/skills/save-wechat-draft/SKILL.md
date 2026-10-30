@@ -27,6 +27,8 @@ Require all of the following:
 
 Use `<plugin-root>/scripts/wechat_draft_api.py`. Upload inline images, upload a cover image, rewrite image URLs, and add the draft. Report API error codes without tokens. Do not call free-publish, publish, mass-send, delete, or replace-live-content endpoints.
 
+Use the reviewed `wechat-upload.html`, never a local preview. For schema 8 formal articles, require the matching `bundle-manifest.json`, completed `qa-review.json`, and `draft-approval.json` written by the state tool after explicit user approval. The API verifies these bytes before contacting WeChat. If any artifact changed, rebuild and redo the affected reviews, then obtain approval for that concrete version. Never regenerate these records merely to bypass a failed comparison.
+
 ## Browser path
 
 Open the Official Account article editor, fill title, author, digest, body, and available images, then click only “保存为草稿”. Return to the draft list and verify the exact test title exists. Never click “发表”.

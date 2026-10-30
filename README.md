@@ -9,15 +9,15 @@
 
 插件只支持在用户明确批准后保存到公众号草稿箱，不包含自动发表、群发、删除或覆盖线上内容的功能。
 
-当前稳定版本：[v0.8.2](https://github.com/Learner97/mri-wechat-publisher/releases/tag/v0.8.2)。
+当前稳定版本：[v0.9.0](https://github.com/Learner97/mri-wechat-publisher/releases/tag/v0.9.0)。
 
-### v0.8.2 更新
+### v0.9.0 更新
 
-- 新文章使用 `schema_version: 8`，正文采用“研究速览—引言—方法—结果—结果解读—结语”结构；
-- 顶部灰色导读卡先回答“为什么值得看”，再根据论文自身特点选择直接陈述、现象反差、开放问题或自问自答。问句不是默认形式，批量写作还会检查重复句法和问号模式；
-- “研究速览”负责交代研究怎样开展及主要发现，避免与灰框重复，也不提前堆叠详细统计量；
-- 结语中的 MRI 或研究设计启示改为真正可选：只有能提供论文特异的新信息时才自然写入，不再默认生成第二段或使用固定过渡句；
-- 强化 `method_map`、证据定位、统计量追踪、因果措辞和批量反模板检查，同时保持微信公众号接口仅保存草稿、不自动发表。
+- 首读论文后冻结关键事实和精确来源，再逐项对照正文，定位方法定义、分析分母、关键交互及阴性结果的重要遗漏；零关键词命中或 `verified` 标志不代表科学核验通过。
+- 改善否定、条件因果与“不显著≠完全独立”的风险提示，正常专业术语无需为通过检查而替换。
+- 写正文前检查论文原图在430px视口、422px正文图宽下的核心信息；必要标签不可读则阻断，含ND许可的图片不以裁剪补救。
+- 相同输入复用确定性构建，仅审查变化时复用HTML和来源摘录校验；过期科学QA和用户批准不会因缓存放行。没有实际模型usage时明确记录未测量，不宣称Token节省比例。
+- 保留Schema 8、六章节结构和五个主Skill；旧Schema 1–7继续兼容。新版正式QA需内部事实覆盖及手机截图记录，格式见[验收文档](plugins/mri-wechat-publisher/docs/acceptance-tests.md)。
 
 ### 全文来源与证据门控
 
@@ -74,15 +74,15 @@ WECHAT_APP_SECRET=<your-app-secret>
 
 The plugin can save an explicitly approved draft, but it does not implement automatic publishing, mass sending, deletion, or overwriting of live content.
 
-Current stable release: [v0.8.2](https://github.com/Learner97/mri-wechat-publisher/releases/tag/v0.8.2).
+Current stable release: [v0.9.0](https://github.com/Learner97/mri-wechat-publisher/releases/tag/v0.9.0).
 
-### What's new in v0.8.2
+### What's new in v0.9.0
 
-- New articles use `schema_version: 8` with Research Overview, Introduction, Methods, Results, Result Interpretation, and Closing;
-- The grey digest first establishes why the paper is worth reading, then chooses a paper-specific form such as a direct statement, contrast, open question, or question with an answer. Questions are not the default, and batch QA checks repeated syntax and question patterns;
-- Research Overview explains how the study was conducted and what it found without repeating the digest or previewing a list of detailed statistics;
-- MRI or study-design implications in the Closing are genuinely optional. They appear only when they add paper-specific information, without a mandatory second paragraph or fixed transition phrase;
-- Stronger method maps, evidence locators, statistic traceability, causal-language checks, and batch anti-template QA retain the existing draft-only WeChat safety boundary.
+- Freeze source-located key facts at first reading, then compare them with the draft to flag consequential omissions in definitions, analysis denominators, interactions and null results. Zero keyword hits or a `verified` flag never establish scientific accuracy.
+- Better handling of negation, conditional causal language and non-significance versus proven independence, without forcing terminology substitutions.
+- Inspect original figures before writing at a 430px viewport and 422px content width. Unreadable essential labels block QA; ND images are not cropped as a workaround.
+- Reuse deterministic builds and unchanged HTML/source-excerpt checks. Changed evidence or review records invalidate prior QA and approval. Actual model usage is reported as unmeasured when unavailable; no token-saving percentage is claimed.
+- Keep Schema 8, six article sections and five main Skills; retain legacy Schema 1–7 support. Formal QA now needs internal fact-coverage and phone-inspection records; see [acceptance tests](plugins/mri-wechat-publisher/docs/acceptance-tests.md).
 
 ### Full-text source and evidence gate
 

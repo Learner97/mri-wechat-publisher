@@ -1,0 +1,17 @@
+[
+  {"name":"组内显著性冒充交互","type":"pharmacology_posthoc","text":"A组p<0.05，B组p>0.05，因此A与B有显著差异。","expected":"interaction_inference"},
+  {"name":"四类冒充必经阶段","type":"network_subtyping","text":"横断面聚类得到四类，这四类是患者必经的疾病发展阶段。","expected":"subtype_stage"},
+  {"name":"组差冒充个体变化","type":"longitudinal_outcome","text":"横断面结果说明个体随病程逐渐萎缩，萎缩更快。","expected":"crosssection_change"},
+  {"name":"AUC冒充准确率","type":"imaging_ml","text":"AUC为0.85，意味着准确率达到85%。","expected":"metric_interpretation"},
+  {"name":"空间冒充个体预测","type":"spatial_multimodal","text":"空间相关说明该分布可用于个体疾病风险预测。","expected":"spatial_to_individual"},
+  {"name":"权重冒充生理能耗","type":"new_mri_metric","text":"网络权重代表实际生理能耗。","expected":"metric_definition"},
+  {"name":"空间关联冒充机制","type":"spatial_multimodal","text":"空间对应证明了基因表达导致脑结构改变的确定机制。","expected":"association_causality"},
+  {"name":"MR无条件证明","type":"genetic_causality","text":"孟德尔随机化证明了不受工具变量假设限制的因果关系。","expected":"mr_assumptions"},
+  {"name":"CV冒充临床验证","type":"imaging_ml","text":"交叉验证完成了独立临床验证，因此模型可直接用于临床。","expected":"validation_scope"},
+  {"name":"总样本冒充子分析分母","type":"longitudinal_outcome","text":"总样本量1000人均用于所有子分析。","expected":"sample_denominator"},
+  {"name":"有效阴性结果","type":"pharmacology_posthoc","text":"治疗与亚组的交互作用不显著，未发现两组疗效存在显著差异。","expected":null},
+  {"name":"干预导致并非关键词错误","type":"pharmacology_posthoc","text":"随机对照干预显示，药物导致实验终点的反应幅度下降。","expected":null},
+  {"name":"AUC及准确率各自报告","type":"imaging_ml","text":"AUC为0.85，准确率为0.80，两项指标分别报告。","expected":null},
+  {"name":"空间不能外推","type":"spatial_multimodal","text":"空间相关不能等同于个体疾病风险预测。","expected":null},
+  {"name":"否定因果的专业限定","type":"spatial_multimodal","text":"局部遗传相关能找到额外重叠，但这些重叠不等于某条梯度导致精神疾病。","expected":null}
+]

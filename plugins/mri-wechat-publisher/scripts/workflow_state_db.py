@@ -638,6 +638,7 @@ def permanent_selection_cycle(
         SELECT cycle_id
         FROM cycles
         WHERE selected_paper_id=?
+          AND status<>'CANCELLED'
         ORDER BY COALESCE(selected_at, created_at)
         LIMIT 1
         """,
@@ -650,6 +651,7 @@ def permanent_selection_cycle(
         SELECT batch_cycle_id
         FROM selection_queue
         WHERE paper_id=?
+          AND status<>'CANCELLED'
         ORDER BY queued_at
         LIMIT 1
         """,
@@ -752,6 +754,7 @@ def insert_candidates(
     reject_previous: bool,
     recommendation_round_number: int | None = None,
     cooldown_rounds: int = DEFAULT_COOLDOWN_ROUNDS,
+    allowed_previous_dois: set[str] | None = None,
 ) -> int:
     candidates = recommendation_payload.get("candidates")
     if not isinstance(candidates, list) or not candidates:
@@ -768,12 +771,16 @@ def insert_candidates(
         if reject_previous:
             if recommendation_round_number is None:
                 raise ValueError("启用候选去重时必须提供推荐轮次。")
-            ineligibility = candidate_ineligibility(
-                connection,
-                paper_id,
-                recommendation_round_number,
-                cooldown_rounds,
-            )
+            candidate_doi = normalize_doi(candidate.get("doi")) or ""
+            carry_over_allowed = candidate_doi in (allowed_previous_dois or set())
+            ineligibility = None
+            if not carry_over_allowed:
+                ineligibility = candidate_ineligibility(
+                    connection,
+                    paper_id,
+                    recommendation_round_number,
+                    cooldown_rounds,
+                )
             if ineligibility and ineligibility["reason"] == "permanently_selected":
                 raise ValueError(
                     "检测到已选择或已排队论文："
@@ -811,6 +818,59 @@ def insert_candidates(
         )
         inserted += 1
     return inserted
+
+
+def validate_cancelled_carryovers(
+    connection: sqlite3.Connection, recommendation_payload: dict[str, Any]
+) -> set[str]:
+    raw_dois = recommendation_payload.get("carry_over_cancelled_dois") or []
+    if not isinstance(raw_dois, list):
+        raise ValueError("carry_over_cancelled_dois 必须是 DOI 数组。")
+    normalized = {normalize_doi(value) or "" for value in raw_dois}
+    normalized.discard("")
+    if not normalized:
+        return set()
+    candidate_dois = {
+        normalize_doi(candidate.get("doi")) or ""
+        for candidate in recommendation_payload.get("candidates") or []
+        if isinstance(candidate, dict)
+    }
+    missing = sorted(normalized - candidate_dois)
+    if missing:
+        raise ValueError(
+            "带入 DOI 未出现在候选数组中：" + ", ".join(missing)
+        )
+    for doi in sorted(normalized):
+        cancelled = connection.execute(
+            """
+            SELECT 1
+            FROM papers p
+            JOIN selection_queue q ON q.paper_id=p.paper_id
+            WHERE p.doi=? COLLATE NOCASE AND q.status='CANCELLED'
+            LIMIT 1
+            """,
+            (doi,),
+        ).fetchone()
+        if not cancelled:
+            raise ValueError(
+                f"只允许带入此前已取消的队列论文：{doi}"
+            )
+        conflicting = connection.execute(
+            """
+            SELECT q.status
+            FROM papers p
+            JOIN selection_queue q ON q.paper_id=p.paper_id
+            WHERE p.doi=? COLLATE NOCASE
+              AND q.status IN ('ACTIVE','QUEUED','COMPLETED')
+            LIMIT 1
+            """,
+            (doi,),
+        ).fetchone()
+        if conflicting:
+            raise ValueError(
+                f"论文仍有不可带入的队列状态 {conflicting['status']}：{doi}"
+            )
+    return normalized
 
 
 def candidate_fulltext_access(
@@ -1406,9 +1466,11 @@ def recommendation_exclusions(
             SELECT selected_paper_id AS paper_id, cycle_id AS source_cycle
             FROM cycles
             WHERE selected_paper_id IS NOT NULL
+              AND status<>'CANCELLED'
             UNION
             SELECT paper_id, batch_cycle_id AS source_cycle
             FROM selection_queue
+            WHERE status<>'CANCELLED'
         )
         SELECT p.paper_id, p.doi, p.pmid, p.title, p.journal,
                MIN(pp.source_cycle) AS source_cycle,
@@ -1805,6 +1867,7 @@ def create_cycle(
             raise ValueError(
                 f"已有未完成周期：{current['cycle_id']} ({current['status']})"
             )
+        allowed_previous_dois = validate_cancelled_carryovers(connection, payload)
         connection.execute(
             """
             INSERT INTO cycles(
@@ -1828,6 +1891,7 @@ def create_cycle(
             reject_previous=True,
             recommendation_round_number=round_number,
             cooldown_rounds=policy["unselected_cooldown_rounds"],
+            allowed_previous_dois=allowed_previous_dois,
         )
         advance_recommendation_due(connection, timestamp)
     export_compatibility(connection)
@@ -2106,6 +2170,69 @@ def retire_selection_batch(
     }
 
 
+def cancel_queued_item(
+    connection: sqlite3.Connection,
+    batch_cycle_id: str,
+    queue_position: int,
+    reason: str,
+) -> dict[str, Any]:
+    ensure_safe_text(reason, "cancel-queued-item.reason")
+    if queue_position <= 0:
+        raise ValueError("队列位置必须为正整数。")
+    timestamp = now_iso()
+    with immediate_transaction(connection):
+        row = connection.execute(
+            """
+            SELECT q.queue_item_id, q.status, q.source_choice, q.processing_cycle_id,
+                   p.doi, p.title
+            FROM selection_queue q
+            JOIN papers p ON p.paper_id=q.paper_id
+            WHERE q.batch_cycle_id=? AND q.queue_position=?
+            """,
+            (batch_cycle_id, queue_position),
+        ).fetchone()
+        if not row:
+            raise ValueError(
+                f"队列项不存在：{batch_cycle_id} / position {queue_position}"
+            )
+        if row["status"] != "QUEUED":
+            raise ValueError(
+                f"只能取消尚未开始的 QUEUED 项；当前状态为 {row['status']}。"
+            )
+        if row["processing_cycle_id"] is not None:
+            raise ValueError("QUEUED 项已关联处理周期，拒绝取消。")
+        connection.execute(
+            """
+            UPDATE selection_queue SET status='CANCELLED', completed_at=?
+            WHERE queue_item_id=? AND status='QUEUED'
+            """,
+            (timestamp, row["queue_item_id"]),
+        )
+        set_metadata(
+            connection,
+            f"cancelled_queue_item:{row['queue_item_id']}",
+            {
+                "cancelled_at": timestamp,
+                "batch_cycle_id": batch_cycle_id,
+                "queue_position": queue_position,
+                "source_choice": row["source_choice"],
+                "doi": row["doi"],
+                "reason": reason,
+            },
+        )
+    export_compatibility(connection)
+    return {
+        "status": "CANCELLED",
+        "batch_cycle_id": batch_cycle_id,
+        "queue_position": queue_position,
+        "source_choice": row["source_choice"],
+        "doi": row["doi"],
+        "title": row["title"],
+        "cancelled_at": timestamp,
+        "reason": reason,
+    }
+
+
 def import_candidates(
     connection: sqlite3.Connection, cycle_id: str, recommendation_path: Path
 ) -> int:
@@ -2367,7 +2494,13 @@ def claim_writing(
     automation_id: str,
     run_key: str | None,
     claimed_at: str | None = None,
+    user_authorized_early_start: bool = False,
+    early_start_detail: str | None = None,
 ) -> dict[str, Any]:
+    if user_authorized_early_start:
+        if not early_start_detail:
+            raise ValueError("用户授权提前启动时必须提供 --early-start-detail。")
+        ensure_safe_text(early_start_detail, "claim-writing.early_start_detail")
     timestamp = claimed_at or now_iso()
     job_run_id = f"job-{uuid.uuid4().hex}"
     with immediate_transaction(connection):
@@ -2405,14 +2538,24 @@ def claim_writing(
             if available_time.tzinfo is None:
                 available_time = available_time.replace(tzinfo=current_time.tzinfo)
             if current_time < available_time:
-                return {
-                    "claimed": False,
-                    "reason": "queued_not_ready",
-                    "status": "SELECTED",
-                    "cycle_id": cycle["cycle_id"],
-                    "queue_position": int(queue_item["queue_position"]),
-                    "available_at": queue_item["available_at"],
-                }
+                if not user_authorized_early_start:
+                    return {
+                        "claimed": False,
+                        "reason": "queued_not_ready",
+                        "status": "SELECTED",
+                        "cycle_id": cycle["cycle_id"],
+                        "queue_position": int(queue_item["queue_position"]),
+                        "available_at": queue_item["available_at"],
+                    }
+                set_metadata(
+                    connection,
+                    f"early_start:{cycle['cycle_id']}:{timestamp}",
+                    {
+                        "authorized_by": "user",
+                        "detail": early_start_detail,
+                        "original_available_at": queue_item["available_at"],
+                    },
+                )
         source_gate = ensure_source_gate(connection, cycle["cycle_id"])
         if source_gate["gate_status"] == "AWAITING_USER_UPLOAD":
             return {
@@ -2450,6 +2593,7 @@ def claim_writing(
         result = {
             "claimed": True,
             "job_run_id": job_run_id,
+            "user_authorized_early_start": user_authorized_early_start,
             "source_gate": source_gate,
             "cycle": cycle_dict(
                 connection,
@@ -2513,6 +2657,16 @@ def set_artifacts(
     title = str(article_payload.get("title") or "").strip()
     if not article_id or not title:
         raise ValueError("文章 JSON 缺少 article_id 或 title。")
+    from validate_article import validate_article
+    from article_artifacts import verify_review
+    if validate_article(article_payload, Path(article_json_path))["status"] != "QA_PASSED":
+        raise ValueError("文章未通过当前结构与内容校验。")
+    upload_path = Path(preview_path).resolve().parent / "wechat-upload.html"
+    hashes = verify_review(Path(article_json_path), upload_path)
+    if article_payload.get("schema_version") == 8:
+        bundle = load_json(upload_path.parent / "bundle-manifest.json")
+        if hashlib.sha256(Path(preview_path).read_bytes()).hexdigest() != bundle["outputs_sha256"]["preview.html"]:
+            raise ValueError("登记的预览不是本次已复核的预览版本。")
     source_payload = article_payload.get("source") or {}
     if source_payload.get("evidence_level") != "FULLTEXT":
         raise ValueError("正式草稿只能使用 evidence_level=FULLTEXT 的文章。")
@@ -2527,8 +2681,8 @@ def set_artifacts(
         cycle = connection.execute(
             "SELECT * FROM cycles WHERE cycle_id=?", (cycle_id,)
         ).fetchone()
-        if not cycle or cycle["status"] != "WRITING":
-            raise ValueError(f"当前周期不在 WRITING：{cycle['status'] if cycle else 'MISSING'}")
+        if not cycle or cycle["status"] not in {"WRITING", "AWAITING_DRAFT_APPROVAL"}:
+            raise ValueError(f"当前周期不在写作或待审阶段：{cycle['status'] if cycle else 'MISSING'}")
         gate = connection.execute(
             "SELECT gate_status, manifest_path FROM source_gates WHERE cycle_id=?", (cycle_id,)
         ).fetchone()
@@ -2574,20 +2728,133 @@ def set_artifacts(
                 timestamp,
             ),
         )
+        previous = get_metadata(connection, f"article_qa:{cycle_id}")
+        changed = not previous or previous.get("artifacts_sha256") != hashes
         connection.execute(
             """
             UPDATE cycles SET status='AWAITING_DRAFT_APPROVAL', article_json_path=?,
-                preview_path=?, qa_status=?, updated_at=?
-            WHERE cycle_id=? AND status='WRITING'
+                preview_path=?, qa_status=?, updated_at=?,
+                user_draft_approval=CASE WHEN ? THEN 0 ELSE user_draft_approval END
+            WHERE cycle_id=? AND status IN ('WRITING','AWAITING_DRAFT_APPROVAL')
             """,
-            (article_json_path, preview_path, qa_status, timestamp, cycle_id),
+            (article_json_path, preview_path, qa_status, timestamp, changed, cycle_id),
         )
+        set_metadata(connection, f"article_qa:{cycle_id}", {
+            "upload_path": str(upload_path), "artifacts_sha256": hashes,
+        })
     export_compatibility(connection)
     return {"cycle_id": cycle_id, "status": "AWAITING_DRAFT_APPROVAL", "article_id": article_id}
 
 
-def approve_draft(connection: sqlite3.Connection, cycle_id: str) -> None:
+def revision_artifacts(article_path: Path, html_path: Path) -> tuple[dict[str, Any], dict[str, str]]:
+    from validate_article import validate_article
+    from article_artifacts import verify_review
+
+    article = load_json(article_path)
+    if article.get("publication_mode") != "draft_only":
+        raise ValueError("修订稿必须为 draft_only。")
+    if validate_article(article, article_path)["status"] != "QA_PASSED":
+        raise ValueError("修订稿未通过 QA_PASSED。")
+    source = article.get("source") or {}
+    if source.get("evidence_level") != "FULLTEXT" or source.get("fulltext_verified") is not True:
+        raise ValueError("修订稿必须使用已验证全文。")
+    hashes = verify_review(article_path, html_path)
+    return article, hashes
+
+
+def approve_revision_draft(
+    connection: sqlite3.Connection, cycle_id: str, article_path: Path, html_path: Path
+) -> dict[str, Any]:
+    """Approve an immutable revision without reopening its cycle or touching its queue."""
+    article, hashes = revision_artifacts(article_path, html_path)
+    article_id = article["article_id"]
+    key = f"draft_revision:{article_id}"
+    approval = {
+        "cycle_id": cycle_id, "article_id": article_id, "title": article["title"],
+        "article_json_path": str(article_path), "html_path": str(html_path),
+        "artifact_sha256": hashes, "qa_status": "QA_PASSED",
+        "user_draft_approval": True, "status": "APPROVED", "approved_at": now_iso(),
+    }
+    ensure_safe_payload(approval)
     with immediate_transaction(connection):
+        cycle = connection.execute("SELECT * FROM cycles WHERE cycle_id=?", (cycle_id,)).fetchone()
+        if not cycle or cycle["status"] not in {"DRAFT_SAVED", "COMPLETED", "PUBLISHED"}:
+            raise ValueError("独立修订审批仅用于已完成的历史周期。")
+        gate = connection.execute("SELECT * FROM source_gates WHERE cycle_id=?", (cycle_id,)).fetchone()
+        manifest = (article_path.parent / article["source"]["source_manifest"]).resolve()
+        if (not gate or gate["gate_status"] != "SOURCE_VALIDATED"
+                or not manifest.samefile(Path(gate["manifest_path"]))):
+            raise ValueError("修订稿未绑定本周期已验证来源清单。")
+        paper = connection.execute("SELECT doi FROM papers WHERE paper_id=?", (cycle["selected_paper_id"],)).fetchone()
+        if not paper or normalize_doi(article["source"].get("doi")) != normalize_doi(paper["doi"]):
+            raise ValueError("修订稿 DOI 与历史周期不匹配。")
+        if connection.execute("SELECT 1 FROM articles WHERE article_id=?", (article_id,)).fetchone():
+            raise ValueError("修订稿必须使用独立 article_id，不覆盖历史文章。")
+        previous = get_metadata(connection, key)
+        if previous and (previous["cycle_id"] != cycle_id or previous["artifact_sha256"] != hashes):
+            raise ValueError("修订幂等键已绑定另一版本，请使用新的 article_id。")
+        if previous and previous["status"] == "DRAFT_SAVED":
+            raise ValueError("本修订版已保存，禁止重复新增草稿。")
+        set_metadata(connection, key, approval)
+    export_compatibility(connection)
+    from article_artifacts import write_approval
+    write_approval(article_id, html_path, hashes)
+    return {"cycle_id": cycle_id, "article_id": article_id, "user_draft_approval": True,
+            "status": "REVISION_APPROVED", "queue_changed": False}
+
+
+def record_revision_draft(
+    connection: sqlite3.Connection, cycle_id: str, receipt_path: Path, receipt: dict[str, Any]
+) -> dict[str, Any]:
+    key = f"draft_revision:{receipt.get('article_id')}"
+    ensure_safe_payload(receipt)
+    with immediate_transaction(connection):
+        approval = get_metadata(connection, key)
+        if (not approval or approval["cycle_id"] != cycle_id
+                or not approval["user_draft_approval"] or approval["qa_status"] != "QA_PASSED"):
+            raise ValueError("修订稿缺少对应周期的用户审批。")
+        verification = receipt.get("verification") or {}
+        media_id = str(receipt.get("draft_media_id") or "").strip()
+        if (receipt.get("status") != "DRAFT_SAVED" or receipt.get("publication_mode") != "draft_only"
+                or receipt.get("title") != approval["title"] or not media_id
+                or verification.get("status") != "DRAFT_GET_PASSED" or verification.get("title_matched") is not True):
+            raise ValueError("修订草稿回执未通过草稿模式、标题或回读核验。")
+        if approval["status"] == "DRAFT_SAVED":
+            if approval.get("draft_media_id") != media_id:
+                raise ValueError("同一修订幂等键已有不同草稿，拒绝覆盖回执。")
+        else:
+            if approval["status"] != "APPROVED":
+                raise ValueError("修订稿未获批准。")
+            _, hashes = revision_artifacts(Path(approval["article_json_path"]), Path(approval["html_path"]))
+            if hashes != approval["artifact_sha256"]:
+                raise ValueError("修订稿内容在批准后发生变化，不能登记为已批准版本。")
+            connection.execute(
+                """INSERT INTO drafts(cycle_id, article_id, draft_media_id, title, transport,
+                       status, receipt_path, saved_at, verification_status, created_at)
+                   VALUES(?, NULL, ?, ?, ?, 'DRAFT_SAVED', ?, ?, 'DRAFT_GET_PASSED', ?)""",
+                (cycle_id, media_id, receipt["title"], receipt.get("transport"), str(receipt_path),
+                 receipt.get("saved_at_utc"), now_iso()),
+            )
+            approval.update(status="DRAFT_SAVED", draft_media_id=media_id,
+                            draft_receipt_path=str(receipt_path), saved_at=receipt.get("saved_at_utc"))
+            set_metadata(connection, key, approval)
+    export_compatibility(connection)
+    return {"cycle_id": cycle_id, "article_id": receipt["article_id"], "status": "DRAFT_SAVED",
+            "draft_media_id": media_id, "queue_changed": False, "next_queued": None}
+
+
+def approve_draft(connection: sqlite3.Connection, cycle_id: str) -> None:
+    from article_artifacts import verify_review, write_approval
+    with immediate_transaction(connection):
+        cycle = connection.execute("SELECT * FROM cycles WHERE cycle_id=?", (cycle_id,)).fetchone()
+        binding = get_metadata(connection, f"article_qa:{cycle_id}")
+        if not cycle or not binding:
+            raise ValueError("缺少已登记的成稿QA版本，请先重新登记成稿。")
+        article_path = Path(cycle["article_json_path"])
+        html_path = Path(binding["upload_path"])
+        hashes = verify_review(article_path, html_path)
+        if hashes != binding["artifacts_sha256"]:
+            raise ValueError("成稿在QA后发生变化，旧QA失效，请重新复核。")
         updated = connection.execute(
             """
             UPDATE cycles SET user_draft_approval=1, updated_at=?
@@ -2598,12 +2865,15 @@ def approve_draft(connection: sqlite3.Connection, cycle_id: str) -> None:
         if updated != 1:
             raise ValueError("草稿审批失败：周期状态或 QA 状态不满足要求。")
     export_compatibility(connection)
+    write_approval(load_json(article_path)["article_id"], html_path, hashes)
 
 
 def record_draft(connection: sqlite3.Connection, cycle_id: str, receipt_path: Path) -> dict[str, Any]:
     receipt = load_json(receipt_path)
     if receipt.get("status") != "DRAFT_SAVED" or receipt.get("publication_mode") != "draft_only":
         raise ValueError("草稿回执必须为 DRAFT_SAVED 且 publication_mode=draft_only。")
+    if get_metadata(connection, f"draft_revision:{receipt.get('article_id')}"):
+        return record_revision_draft(connection, cycle_id, receipt_path, receipt)
     timestamp = now_iso()
     next_queued = None
     with immediate_transaction(connection):
@@ -2614,6 +2884,10 @@ def record_draft(connection: sqlite3.Connection, cycle_id: str, receipt_path: Pa
             raise ValueError("当前周期不在草稿审批阶段。")
         if not cycle["user_draft_approval"] or cycle["qa_status"] != "QA_PASSED":
             raise ValueError("缺少用户草稿批准或 QA_PASSED。")
+        from article_artifacts import verify_review
+        binding = get_metadata(connection, f"article_qa:{cycle_id}")
+        if not binding or verify_review(Path(cycle["article_json_path"]), Path(binding["upload_path"]), require_approval=True) != binding["artifacts_sha256"]:
+            raise ValueError("当前成稿与已批准的QA版本不一致。")
         article = connection.execute(
             "SELECT * FROM articles WHERE cycle_id=?", (cycle_id,)
         ).fetchone()
@@ -2987,12 +3261,19 @@ def build_parser() -> argparse.ArgumentParser:
     retire_batch.add_argument("--batch-cycle-id", required=True)
     retire_batch.add_argument("--reason", required=True)
 
+    cancel_item = subparsers.add_parser("cancel-queued-item")
+    cancel_item.add_argument("--batch-cycle-id", required=True)
+    cancel_item.add_argument("--queue-position", type=int, required=True)
+    cancel_item.add_argument("--reason", required=True)
+
     recommendation_due = subparsers.add_parser("set-recommendation-due")
     recommendation_due.add_argument("--at", required=True)
 
     claim = subparsers.add_parser("claim-writing")
     claim.add_argument("--automation-id", default="mri-09-30")
     claim.add_argument("--run-key")
+    claim.add_argument("--user-authorized-early-start", action="store_true")
+    claim.add_argument("--early-start-detail")
 
     transition = subparsers.add_parser("transition")
     transition.add_argument("--cycle-id", required=True)
@@ -3008,6 +3289,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     approve = subparsers.add_parser("approve-draft")
     approve.add_argument("--cycle-id", required=True)
+    approve.add_argument("--revision-article-json", type=Path)
+    approve.add_argument("--revision-html", type=Path)
 
     draft = subparsers.add_parser("record-draft")
     draft.add_argument("--cycle-id", required=True)
@@ -3117,10 +3400,23 @@ def main() -> int:
             result = retire_selection_batch(
                 connection, args.batch_cycle_id, args.reason
             )
+        elif args.command == "cancel-queued-item":
+            result = cancel_queued_item(
+                connection,
+                args.batch_cycle_id,
+                args.queue_position,
+                args.reason,
+            )
         elif args.command == "set-recommendation-due":
             result = set_recommendation_due(connection, args.at)
         elif args.command == "claim-writing":
-            result = claim_writing(connection, args.automation_id, args.run_key)
+            result = claim_writing(
+                connection,
+                args.automation_id,
+                args.run_key,
+                user_authorized_early_start=args.user_authorized_early_start,
+                early_start_detail=args.early_start_detail,
+            )
         elif args.command == "transition":
             next_queued = transition_cycle(
                 connection, args.cycle_id, args.from_status, args.to_status, args.detail
@@ -3139,8 +3435,14 @@ def main() -> int:
                 args.qa_status,
             )
         elif args.command == "approve-draft":
-            approve_draft(connection, args.cycle_id)
-            result = {"cycle_id": args.cycle_id, "user_draft_approval": True}
+            if args.revision_article_json is not None or args.revision_html is not None:
+                if args.revision_article_json is None or args.revision_html is None:
+                    raise ValueError("历史修订审批必须同时提供 --revision-article-json 与 --revision-html。")
+                result = approve_revision_draft(connection, args.cycle_id,
+                    args.revision_article_json.resolve(), args.revision_html.resolve())
+            else:
+                approve_draft(connection, args.cycle_id)
+                result = {"cycle_id": args.cycle_id, "user_draft_approval": True}
         elif args.command == "record-draft":
             result = record_draft(connection, args.cycle_id, args.receipt.resolve())
         elif args.command == "record-publication":

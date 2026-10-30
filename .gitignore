@@ -5,6 +5,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .venv/
+/.codex_deps/
 .mri-wechat-publisher/
 build/
 dist/
@@ -38,3 +39,15 @@ artifacts/
 !plugins/mri-wechat-publisher/assets/*.png
 !plugins/mri-wechat-publisher/assets/*.jpg
 !plugins/mri-wechat-publisher/assets/*.jpeg
+
+# Local development, browser traces and deployed run materials are not release source.
+/quality-tests/
+/archive/
+/.playwright-cli/
+/.tmp/
+/.tmp-workflow-tests/
+/.uv-cache/
+/plugins/mri-wechat-publisher/work/
+/plugins/mri-wechat-publisher/tmp/
+/plugins/mri-wechat-publisher/docs/quality-optimization-report.md
+/plugins/mri-wechat-publisher/docs/quality-optimization-metrics.json
