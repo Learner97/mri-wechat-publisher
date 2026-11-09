@@ -4,10 +4,8 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import http.client
 import http.cookiejar
-import io
 import json
 import re
 import time
@@ -18,7 +16,6 @@ from pathlib import Path
 from typing import Any
 
 from lxml import html
-from PIL import Image
 
 
 USER_AGENT = (
@@ -108,16 +105,10 @@ def choose_image_url(figure: Any, base_url: str) -> str:
         candidates.extend(figure.xpath(f".//img[@{attr}]/@{attr}"))
     if not candidates:
         return ""
-    candidates = [urllib.parse.urljoin(base_url, url) for url in candidates]
-    # Nature's /full/ endpoint serves the original figure, unlike /lw685/.
-    candidates = [
-        re.sub(r"/lw\d+/springer-static/", "/full/springer-static/", url)
-        if urllib.parse.urlsplit(url).hostname == "media.springernature.com" else url
-        for url in candidates
-    ]
-    return max(candidates, key=lambda url: (
-        "/full/" in url, not urllib.parse.urlsplit(url).query, url.lower().endswith(".png")
-    ))
+    url = candidates[-1]
+    if url.startswith("//"):
+        url = "https:" + url
+    return urllib.parse.urljoin(base_url, url)
 
 
 def safe_name(value: str, fallback: str) -> str:
@@ -147,8 +138,6 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("url")
     parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--existing-html", type=Path, help="Read an already verified publisher HTML file.")
-    parser.add_argument("--figures-only", action="store_true", help="Fetch original figures without fetching supplements.")
     args = parser.parse_args()
 
     output_dir = args.output_dir.resolve()
@@ -159,11 +148,10 @@ def main() -> int:
     supplements_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        raw, final_url = ((args.existing_html.read_bytes(), args.url) if args.existing_html
-                          else fetch(args.url, timeout=120))
+        raw, final_url = fetch(args.url, timeout=120)
         html_path = output_dir / "publisher-fulltext.html"
         html_path.write_bytes(raw)
-        document = html.fromstring(raw, base_url=final_url, parser=html.HTMLParser(encoding="utf-8"))
+        document = html.fromstring(raw, base_url=final_url)
         article_json = choose_article_json(iter_json_ld(document))
         body_nodes = document.xpath(
             "//div[contains(concat(' ', normalize-space(@class), ' '), ' c-article-body ')]"
@@ -194,24 +182,14 @@ def main() -> int:
             local_path = ""
             if image_url:
                 filename = safe_name(image_url, f"figure-{index}.jpg")
-                if "/full/" in image_url:
-                    filename = f"{Path(filename).stem}-full{Path(filename).suffix}"
                 destination = figures_dir / filename
-                image_metadata = {}
                 try:
-                    data = destination.read_bytes() if destination.is_file() else fetch(image_url, timeout=120)[0]
-                    with Image.open(io.BytesIO(data)) as image:
-                        image.load()
-                        image_metadata = {"width": image.width, "height": image.height,
-                                          "sha256": hashlib.sha256(data).hexdigest()}
                     if not destination.is_file():
+                        data, _ = fetch(image_url, timeout=120)
                         destination.write_bytes(data)
                     local_path = str(destination.resolve())
-                except (FetchError, OSError, ValueError) as exc:
+                except FetchError:
                     local_path = ""
-                    image_metadata = {"error": str(exc)}
-            else:
-                image_metadata = {"error": "No source figure URL"}
             figures.append({
                 "index": index,
                 "label": node_text(label_nodes[0]) if label_nodes else f"Figure {index}",
@@ -221,11 +199,10 @@ def main() -> int:
                 ])),
                 "image_url": image_url,
                 "local_path": local_path,
-                **image_metadata,
             })
 
         supplements = []
-        links = [] if args.figures_only else body.xpath(".//a[@href]")
+        links = body.xpath(".//a[@href]")
         for index, link in enumerate(links, start=1):
             href = urllib.parse.urljoin(final_url, link.attrib.get("href", ""))
             label = node_text(link)

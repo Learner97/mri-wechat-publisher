@@ -1,6 +1,5 @@
-# Runtime dependencies for validation, sources and article preparation.
+# Optional helpers used by the complete publication workflow.
 lxml>=5.0
 pdfplumber>=0.11
 jsonschema>=4.23
 tzdata>=2025.2
-Pillow>=10.0
